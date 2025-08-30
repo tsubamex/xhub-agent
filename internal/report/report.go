@@ -1,0 +1,319 @@
+package report
+
+import (
+	"context"
+	"crypto/tls"
+	"fmt"
+	"net"
+	"strings"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+
+	"xhub-agent/internal/monitor"
+	"xhub-agent/pkg/logger"
+	pb "xhub-agent/proto/reportpb"
+)
+
+// ReportClient report data client
+type ReportClient struct {
+	serverAddr      string
+	apiKey          string
+	conn            *grpc.ClientConn
+	client          pb.ReportServiceClient
+	logger          *logger.Logger
+	isConnected     bool      // track connection state to avoid repeated logs
+	lastConnectTime time.Time // track last successful connection
+	useTLS          bool      // whether to use TLS encryption
+}
+
+// NewReportClient creates a new report client
+func NewReportClient(serverAddr, apiKey string, log *logger.Logger) *ReportClient {
+	// Validate gRPC server address format
+	if strings.HasPrefix(serverAddr, "http://") || strings.HasPrefix(serverAddr, "https://") {
+		log.Warnf("⚠️  gRPC server address contains HTTP protocol: %s", serverAddr)
+		log.Warnf("   gRPC only supports 'host:port' format, not HTTP URLs")
+		log.Warnf("   Example: 'localhost:9090' instead of 'http://localhost:8080/path'")
+	}
+
+	if strings.Contains(serverAddr, "/") && !strings.HasPrefix(serverAddr, "http") {
+		log.Warnf("⚠️  gRPC server address contains path: %s", serverAddr)
+		log.Warnf("   gRPC doesn't support URL paths, only 'host:port' format")
+		log.Warnf("   Example: 'server.com:9090' instead of 'server.com:9090/api'")
+	}
+
+	// Auto-detect TLS usage based on common patterns
+	useTLS := shouldUseTLS(serverAddr)
+
+	return &ReportClient{
+		serverAddr: serverAddr,
+		apiKey:     apiKey,
+		logger:     log,
+		useTLS:     useTLS,
+	}
+}
+
+// shouldUseTLS determines if TLS should be used based on server address patterns
+func shouldUseTLS(serverAddr string) bool {
+	// Only allow insecure connections for local development
+	if strings.Contains(serverAddr, "localhost") || strings.Contains(serverAddr, "127.0.0.1") {
+		return false // Local development - use insecure
+	}
+
+	// For ALL remote servers, FORCE TLS encryption
+	return true
+}
+
+// isLocalServer checks if the server is a local development server
+func isLocalServer(serverAddr string) bool {
+	return strings.Contains(serverAddr, "localhost") || strings.Contains(serverAddr, "127.0.0.1")
+}
+
+// SetTLS explicitly enables or disables TLS for the connection
+// Note: TLS cannot be disabled for production (non-localhost) servers for security reasons
+func (r *ReportClient) SetTLS(useTLS bool) {
+	// Security check: prevent disabling TLS for production servers
+	if !useTLS && !isLocalServer(r.serverAddr) {
+		r.logger.Warnf("🚨 Security Warning: Cannot disable TLS for production server: %s", r.serverAddr)
+		r.logger.Warnf("   TLS is MANDATORY for all non-localhost connections")
+		r.logger.Warnf("   Keeping TLS enabled for security")
+		return // Ignore the request to disable TLS
+	}
+
+	r.useTLS = useTLS
+	// If connection already exists, it will be recreated on next use
+	if r.conn != nil {
+		r.logger.Debugf("TLS setting changed, will reconnect with %s",
+			map[bool]string{true: "TLS enabled", false: "TLS disabled"}[useTLS])
+		r.Close()
+	}
+}
+
+// IsTLSEnabled returns whether TLS is currently enabled
+func (r *ReportClient) IsTLSEnabled() bool {
+	return r.useTLS
+}
+
+// GetSecurityInfo returns security information about the connection
+func (r *ReportClient) GetSecurityInfo() map[string]interface{} {
+	isLocal := isLocalServer(r.serverAddr)
+	return map[string]interface{}{
+		"server_address": r.serverAddr,
+		"tls_enabled":    r.useTLS,
+		"is_local":       isLocal,
+		"security_level": map[bool]string{true: "SECURE (TLS)", false: "INSECURE (no TLS)"}[r.useTLS],
+		"recommendation": func() string {
+			if isLocal && !r.useTLS {
+				return "OK - Local development"
+			} else if !isLocal && r.useTLS {
+				return "SECURE - Production with TLS"
+			} else if !isLocal && !r.useTLS {
+				return "⚠️ INSECURE - Production without TLS"
+			} else {
+				return "SECURE - Local with TLS"
+			}
+		}(),
+	}
+}
+
+// extractHostname extracts hostname from server address for TLS ServerName
+func (r *ReportClient) extractHostname() string {
+	// Remove port if present
+	if strings.Contains(r.serverAddr, ":") {
+		host, _, err := net.SplitHostPort(r.serverAddr)
+		if err == nil {
+			return host
+		}
+	}
+	return r.serverAddr
+}
+
+// Connect establishes gRPC connection
+func (r *ReportClient) Connect() error {
+	if r.conn != nil {
+		r.logger.Debugf("gRPC connection already exists, reusing connection to: %s", r.serverAddr)
+		return nil // Already connected
+	}
+
+	// Only log connection attempt if not recently connected
+	if !r.isConnected || time.Since(r.lastConnectTime) > 5*time.Minute {
+		r.logger.Infof("🔗 Attempting to establish gRPC connection...")
+		r.logger.Debugf("📡 gRPC Server Address: %s", r.serverAddr)
+		r.logger.Debugf("🔑 API Key: %s", r.apiKey)
+		r.logger.Debugf("⏱️  Connection Timeout: 10 seconds")
+		if r.useTLS {
+			r.logger.Debugf("🔒 Transport: Secure (TLS enabled)")
+		} else {
+			r.logger.Debugf("⚠️  Transport: Insecure (no TLS)")
+		}
+	}
+
+	r.logger.Debugf("🚀 Creating gRPC client connection to %s...", r.serverAddr)
+
+	// Choose credentials based on TLS setting
+	var creds credentials.TransportCredentials
+	if r.useTLS {
+		// Use TLS with system root CAs
+		creds = credentials.NewTLS(&tls.Config{
+			ServerName: r.extractHostname(),
+		})
+	} else {
+		// Use insecure credentials for local development
+		creds = insecure.NewCredentials()
+	}
+
+	conn, err := grpc.NewClient(r.serverAddr, grpc.WithTransportCredentials(creds))
+	if err != nil {
+		r.isConnected = false
+		r.logger.Errorf("❌ gRPC client creation failed!")
+		r.logger.Errorf("   Server: %s", r.serverAddr)
+		r.logger.Errorf("   Error: %v", err)
+		r.logger.Errorf("   Please check:")
+		r.logger.Errorf("   1. Server address format is correct (host:port)")
+		r.logger.Errorf("   2. No HTTP protocol prefix in address")
+		r.logger.Errorf("   3. Address doesn't contain URL paths")
+		return fmt.Errorf("failed to create gRPC client: %w", err)
+	}
+
+	// Check initial connection state
+	state := conn.GetState()
+	r.logger.Debugf("📊 Initial connection state: %s", state)
+
+	// Note: With grpc.NewClient, the connection is lazy and will be established on first RPC call
+	if state == connectivity.Idle {
+		r.logger.Debugf("🔄 Connection is idle (will connect on first RPC call)")
+	}
+
+	r.conn = conn
+	r.client = pb.NewReportServiceClient(conn)
+
+	// Only log success if not recently connected or first time
+	if !r.isConnected || time.Since(r.lastConnectTime) > 5*time.Minute {
+		r.logger.Infof("✅ Successfully connected to gRPC server: %s", r.serverAddr)
+	}
+	r.logger.Debugf("🔗 Connection state: %s", conn.GetState())
+
+	r.isConnected = true
+	r.lastConnectTime = time.Now()
+	return nil
+}
+
+// Close closes the gRPC connection
+func (r *ReportClient) Close() error {
+	if r.conn != nil {
+		r.logger.Debug("Closing gRPC connection")
+		err := r.conn.Close()
+		r.conn = nil
+		r.client = nil
+		r.isConnected = false
+		return err
+	}
+	return nil
+}
+
+// SendReport sends monitoring data to xhub via gRPC
+func (r *ReportClient) SendReport(uuid string, data *monitor.ServerStatusData) error {
+	r.logger.Debugf("📊 Starting gRPC report transmission...")
+	r.logger.Debugf("🆔 Agent UUID: %s", uuid)
+	r.logger.Debugf("📡 Target Server: %s", r.serverAddr)
+
+	// Ensure connection is established
+	if err := r.Connect(); err != nil {
+		return fmt.Errorf("failed to establish gRPC connection: %w", err)
+	}
+
+	// Convert monitor data to protobuf format
+	r.logger.Debugf("🔄 Converting data to protobuf format...")
+	pbData := ConvertToProto(data)
+	if pbData == nil {
+		r.logger.Errorf("❌ Failed to convert data to protobuf format")
+		return fmt.Errorf("failed to convert data to protobuf format")
+	}
+	r.logger.Debugf("✅ Data conversion successful")
+
+	// Create request
+	req := &pb.ReportRequest{
+		Uuid: uuid,
+		Data: pbData,
+	}
+	r.logger.Debugf("📦 Created gRPC request with UUID: %s", uuid)
+
+	// Create context with timeout and metadata for authentication
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Add API key to metadata for authentication
+	md := metadata.New(map[string]string{
+		"authorization": "Bearer " + r.apiKey,
+	})
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	// Debug: Log detailed request information
+	r.logger.Debugf("🚀 Sending gRPC request...")
+	r.logger.Debugf("   🎯 Server: %s", r.serverAddr)
+	r.logger.Debugf("   🆔 UUID: %s", uuid)
+	r.logger.Debugf("   🔑 Auth: Bearer %s", r.apiKey)
+	r.logger.Debugf("   ⏱️  Timeout: 30 seconds")
+	r.logger.Debugf("   📊 Data: CPU=%.1f%%, Memory=%d/%d bytes",
+		pbData.Cpu, pbData.Memory.Current, pbData.Memory.Total)
+
+	// Send gRPC request
+	resp, err := r.client.SendReport(ctx, req)
+	if err != nil {
+		r.logger.Errorf("❌ gRPC request failed!")
+		r.logger.Errorf("   Server: %s", r.serverAddr)
+		r.logger.Errorf("   UUID: %s", uuid)
+
+		// Handle gRPC status errors
+		if st, ok := status.FromError(err); ok {
+			r.logger.Errorf("   gRPC Status: %s", st.Code())
+			r.logger.Errorf("   Error Message: %s", st.Message())
+
+			switch st.Code() {
+			case codes.Unauthenticated:
+				r.logger.Errorf("   🔑 Authentication failed - check API key")
+				return fmt.Errorf("authentication failed: API key invalid or expired")
+			case codes.InvalidArgument:
+				r.logger.Errorf("   📊 Invalid data format")
+				return fmt.Errorf("request error: invalid data format - %s", st.Message())
+			case codes.NotFound:
+				r.logger.Errorf("   🔍 Endpoint or UUID not found")
+				return fmt.Errorf("API endpoint not found: check if UUID is registered - %s", st.Message())
+			case codes.Internal:
+				r.logger.Errorf("   🔥 Internal server error")
+				return fmt.Errorf("server error: %s", st.Message())
+			case codes.DeadlineExceeded:
+				r.logger.Errorf("   ⏰ Request timeout exceeded")
+				return fmt.Errorf("request timeout: %s", st.Message())
+			case codes.Unavailable:
+				r.logger.Errorf("   🚫 Server unavailable")
+				return fmt.Errorf("server unavailable: %s", st.Message())
+			default:
+				r.logger.Errorf("   ❓ Unknown gRPC error")
+				return fmt.Errorf("gRPC error [%s]: %s", st.Code(), st.Message())
+			}
+		}
+		r.logger.Errorf("   Raw error: %v", err)
+		return fmt.Errorf("gRPC request failed: %w", err)
+	}
+
+	// Debug: Log response details
+	r.logger.Debugf("✅ gRPC response received")
+	r.logger.Debugf("   📊 Success: %t", resp.Success)
+	r.logger.Debugf("   💬 Message: %s", resp.Message)
+
+	// Check response
+	if !resp.Success {
+		r.logger.Errorf("❌ Server rejected the report: %s", resp.Message)
+		return fmt.Errorf("report failed: %s", resp.Message)
+	}
+
+	r.logger.Debugf("🎉 Data successfully reported via gRPC!")
+	return nil
+}

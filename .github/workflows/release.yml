@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goarch: amd64
+            suffix: linux_amd64
+          - goarch: arm64
+            suffix: linux_arm64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+
+    - name: Get dependencies
+      run: go mod download
+
+    - name: Run tests
+      run: go test ./... -v
+
+    - name: Build binary
+      env:
+        GOOS: linux
+        GOARCH: ${{ matrix.goarch }}
+        CGO_ENABLED: 0
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        mkdir -p bin
+        go build -a -ldflags "-s -w -X main.version=${VERSION} -extldflags '-static'" -o bin/xhub-agent_${{ matrix.suffix }} cmd/main.go
+
+    - name: Create archive
+      run: |
+        cd bin
+        tar -czf xhub-agent_${{ matrix.suffix }}.tar.gz xhub-agent_${{ matrix.suffix }}
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: xhub-agent_${{ matrix.suffix }}_${{ github.run_id }}
+        path: bin/xhub-agent_${{ matrix.suffix }}.*
+
+  release:
+    name: Create Release
+    needs: [build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: xhub-agent_*
+        merge-multiple: true
+
+    - name: Get tag name
+      id: get_tag
+      run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get_tag.outputs.tag }}
+        name: Release ${{ steps.get_tag.outputs.tag }}
+        draft: false
+        prerelease: false
+        files: |
+          xhub-agent_*.*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

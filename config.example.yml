@@ -1,0 +1,31 @@
+# xhub-agent configuration file example
+# Copy this file to config.yml and modify the values accordingly
+
+# Agent unique identifier (obtained from xhub backend)
+uuid: "your-agent-uuid-here"
+
+# 3x-ui login credentials
+xui_user: "admin"
+xui_pass: "your-3xui-password"
+
+# xhub API key (for data reporting authentication)
+xhub_api_key: "your-xhub-api-key"
+
+# xhub gRPC server configuration
+grpcServer: "example.com"  # gRPC server address
+grpcPort: 443              # gRPC server port (443 for production TLS, 9090 for localhost)
+
+# 3x-ui connection configuration (required)
+rootPath: "/xxxx"  # 3x-ui rootPath
+port: 12345                      # 3x-ui port number
+
+# Optional configuration (default values will be used if not set)
+
+# 3x-ui base IP address (default: 127.0.0.1)
+xui_base_url: "127.0.0.1"
+
+# Polling interval in seconds (default: 2, optimized for gRPC)
+poll_interval: 2
+
+# Log level: debug, info, warn, error (default: info)
+log_level: "info"

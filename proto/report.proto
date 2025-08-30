@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package reportpb;
+
+option go_package = "xhub-agent/proto/reportpb";
+
+// ReportService provides server status reporting functionality
+service ReportService {
+  // SendReport sends server status data to xhub
+  rpc SendReport(ReportRequest) returns (ReportResponse);
+}
+
+// ReportRequest contains the data to be reported
+message ReportRequest {
+  string uuid = 1;                    // Agent unique identifier
+  ServerStatusData data = 2;          // Server status data
+}
+
+// ReportResponse contains the response from the server
+message ReportResponse {
+  bool success = 1;                   // Whether the request was successful
+  string message = 2;                 // Response message
+}
+
+// ServerStatusData contains comprehensive server status information
+message ServerStatusData {
+  double cpu = 1;                     // CPU usage rate
+  int32 cpu_cores = 2;                // CPU core count
+  int32 logical_pro = 3;              // Logical processor count
+  double cpu_speed_mhz = 4;           // CPU frequency (MHz)
+  MemoryInfo memory = 5;              // Memory information
+  SwapInfo swap = 6;                  // Swap space information
+  DiskInfo disk = 7;                  // Disk information
+  int32 uptime = 8;                   // Uptime (seconds)
+  repeated double loads = 9;          // System load
+  int32 tcp_count = 10;               // TCP connection count
+  int32 udp_count = 11;               // UDP connection count
+  NetIOInfo net_io = 12;              // Network IO
+  NetTraffic net_traffic = 13;        // Network traffic
+  PublicIPInfo public_ip = 14;        // Public IP information
+  XrayInfo xray = 15;                 // Xray status
+  AppStats app_stats = 16;            // Application status
+}
+
+// MemoryInfo contains memory usage information
+message MemoryInfo {
+  int64 current = 1;                  // Current memory usage
+  int64 total = 2;                    // Total memory
+}
+
+// SwapInfo contains swap space information
+message SwapInfo {
+  int64 current = 1;                  // Current swap usage
+  int64 total = 2;                    // Total swap space
+}
+
+// DiskInfo contains disk usage information
+message DiskInfo {
+  int64 current = 1;                  // Current disk usage
+  int64 total = 2;                    // Total disk space
+}
+
+// NetIOInfo contains network IO information
+message NetIOInfo {
+  int64 up = 1;                       // Upload traffic
+  int64 down = 2;                     // Download traffic
+}
+
+// NetTraffic contains network traffic information
+message NetTraffic {
+  int64 sent = 1;                     // Sent traffic
+  int64 recv = 2;                     // Received traffic
+}
+
+// XrayInfo contains Xray status information
+message XrayInfo {
+  string state = 1;                   // Running status ("running" or other)
+  string error_msg = 2;               // Error message
+  string version = 3;                 // Version
+}
+
+// PublicIPInfo contains public IP information
+message PublicIPInfo {
+  string ipv4 = 1;                    // IPv4 address
+  string ipv6 = 2;                    // IPv6 address
+}
+
+// AppStats contains application status information
+message AppStats {
+  int32 threads = 1;                  // Thread count
+  int64 memory = 2;                   // Application memory usage
+  int32 uptime = 3;                   // Application uptime
+}

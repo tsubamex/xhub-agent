@@ -4,51 +4,8 @@ import (
 	"testing"
 )
 
-func TestReplaceHostWithLocalhost(t *testing.T) {
-	s := &SubscriptionClient{}
-
-	tests := []struct {
-		name     string
-		baseURL  string
-		subID    string
-		expected string
-	}{
-		{
-			name:     "HTTPS with port",
-			baseURL:  "https://xxx.example.com:52122/asdasdsafg/",
-			subID:    "test-sub-id",
-			expected: "https://127.0.0.1:52122/asdasdsafg/test-sub-id",
-		},
-		{
-			name:     "HTTP without port",
-			baseURL:  "http://example.com/sub/",
-			subID:    "another-id",
-			expected: "http://127.0.0.1/sub/another-id",
-		},
-		{
-			name:     "URL without trailing slash",
-			baseURL:  "https://domain.com:8080/path",
-			subID:    "my-id",
-			expected: "https://127.0.0.1:8080/path/my-id",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := s.replaceHostWithLocalhost(tt.baseURL, tt.subID)
-			if err != nil {
-				t.Errorf("replaceHostWithLocalhost() error = %v", err)
-				return
-			}
-			if result != tt.expected {
-				t.Errorf("replaceHostWithLocalhost() = %v, want %v", result, tt.expected)
-			}
-		})
-	}
-}
-
 func TestExtractUniqueSubIDs(t *testing.T) {
-	s := &SubscriptionClient{}
+	s := &SubscriptionClient{resolvedDomain: "test.example.com"}
 
 	// Test data
 	inbounds := []*InboundInfo{

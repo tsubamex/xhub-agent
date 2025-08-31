@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -16,8 +15,9 @@ import (
 
 // SubscriptionClient subscription information client
 type SubscriptionClient struct {
-	auth   *auth.XUIAuth
-	client *http.Client
+	auth           *auth.XUIAuth
+	client         *http.Client
+	resolvedDomain string
 }
 
 // DefaultSettingsResponse default settings response structure
@@ -77,7 +77,7 @@ type SubscriptionHeaders struct {
 }
 
 // NewSubscriptionClient creates a new subscription client
-func NewSubscriptionClient(authClient *auth.XUIAuth) *SubscriptionClient {
+func NewSubscriptionClient(authClient *auth.XUIAuth, resolvedDomain string) *SubscriptionClient {
 	return &SubscriptionClient{
 		auth: authClient,
 		client: &http.Client{
@@ -86,6 +86,7 @@ func NewSubscriptionClient(authClient *auth.XUIAuth) *SubscriptionClient {
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 			},
 		},
+		resolvedDomain: resolvedDomain,
 	}
 }
 
@@ -240,11 +241,12 @@ func (s *SubscriptionClient) ExtractUniqueSubIDs(inbounds []*InboundInfo) ([]Sub
 func (s *SubscriptionClient) GetSubscriptionContent(baseSubURL, subID string) (string, SubscriptionHeaders, error) {
 	var headers SubscriptionHeaders
 
-	// Build subscription URL - replace domain with 127.0.0.1
-	subscriptionURL, err := s.replaceHostWithLocalhost(baseSubURL, subID)
-	if err != nil {
-		return "", headers, fmt.Errorf("failed to build subscription URL: %w", err)
+	// Build subscription URL directly
+	subscriptionURL := baseSubURL
+	if !strings.HasSuffix(subscriptionURL, "/") {
+		subscriptionURL += "/"
 	}
+	subscriptionURL += subID
 
 	// Create HTTP request
 	req, err := http.NewRequest("GET", subscriptionURL, nil)
@@ -254,6 +256,11 @@ func (s *SubscriptionClient) GetSubscriptionContent(baseSubURL, subID string) (s
 
 	// Set User-Agent to simulate v2ray client
 	req.Header.Set("User-Agent", "v2rayN/6.23")
+
+	// Set X-Forwarded-For header if resolved domain is available
+	if s.resolvedDomain != "" {
+		req.Header.Set("X-Forwarded-Host", s.resolvedDomain)
+	}
 
 	// Send request
 	resp, err := s.client.Do(req)
@@ -291,31 +298,6 @@ func (s *SubscriptionClient) GetSubscriptionContent(baseSubURL, subID string) (s
 	}
 
 	return content, headers, nil
-}
-
-// replaceHostWithLocalhost replaces the domain in subscription URL with 127.0.0.1
-func (s *SubscriptionClient) replaceHostWithLocalhost(baseURL, subID string) (string, error) {
-	// Parse base URL
-	parsedURL, err := url.Parse(baseURL)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse base URL: %w", err)
-	}
-
-	// Replace host with 127.0.0.1, keep port unchanged
-	if parsedURL.Port() != "" {
-		parsedURL.Host = "127.0.0.1:" + parsedURL.Port()
-	} else {
-		parsedURL.Host = "127.0.0.1"
-	}
-
-	// Append subID to the path
-	finalURL := parsedURL.String()
-	if !strings.HasSuffix(finalURL, "/") {
-		finalURL += "/"
-	}
-	finalURL += subID
-
-	return finalURL, nil
 }
 
 // GetAllSubscriptionData gets all subscription data

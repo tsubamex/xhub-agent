@@ -55,7 +55,7 @@ func NewAgentService(configPath, logFile string) (*AgentService, error) {
 	monitorClient := monitor.NewMonitorClient(authClient)
 
 	// Create subscription client
-	subscriptionClient := subscription.NewSubscriptionClient(authClient)
+	subscriptionClient := subscription.NewSubscriptionClient(authClient, cfg.ResolvedDomain)
 
 	// Create report client using gRPC server and port
 	grpcAddr := fmt.Sprintf("%s:%d", cfg.GRPCServer, cfg.GRPCPort)
@@ -224,6 +224,8 @@ func (a *AgentService) reportSubscriptionData() {
 		return
 	}
 
+	a.logger.Debugf("📋 Raw subscription data count: %d", len(subscriptions))
+
 	if len(subscriptions) == 0 {
 		a.logger.Debug("📋 No subscription data found, skipping subscription report")
 		return
@@ -238,6 +240,11 @@ func (a *AgentService) reportSubscriptionData() {
 			SubID:      sub.SubID,
 			Email:      sub.Email,
 			NodeConfig: sub.NodeConfig,
+			Headers: report.SubscriptionHeaders{ // Convert headers to report package type
+				ProfileTitle:          sub.Headers.ProfileTitle,
+				ProfileUpdateInterval: sub.Headers.ProfileUpdateInterval,
+				SubscriptionUserinfo:  sub.Headers.SubscriptionUserinfo,
+			},
 		}
 		reportSubs = append(reportSubs, reportSub)
 	}
@@ -266,6 +273,14 @@ func (a *AgentService) reportSubscriptionData() {
 	for i, sub := range reportSubs {
 		configLength := len(sub.NodeConfig)
 		a.logger.Debugf("   📋 Subscription %d: SubID=%s, Email=%s, Config Length=%d bytes", i+1, sub.SubID, sub.Email, configLength)
+
+		// Log HTTP response headers (debug only)
+		if sub.Headers.ProfileTitle != "" || sub.Headers.ProfileUpdateInterval != "" || sub.Headers.SubscriptionUserinfo != "" {
+			a.logger.Debugf("   📋 Headers: ProfileTitle=%s, UpdateInterval=%s, Userinfo=%s",
+				sub.Headers.ProfileTitle, sub.Headers.ProfileUpdateInterval, sub.Headers.SubscriptionUserinfo)
+		} else {
+			a.logger.Debugf("   📋 Headers: No special headers found")
+		}
 
 		// Decode and show first part of the config for verification (debug only)
 		if configLength > 0 {

@@ -370,6 +370,7 @@ fetch_config() {
     GRPC_PORT=$(echo "$CONFIG_JSON" | jq -r '.grpcPort' 2>/dev/null || echo "")
     ROOT_PATH=$(echo "$CONFIG_JSON" | jq -r '.rootPath' 2>/dev/null || echo "")
     PORT=$(echo "$CONFIG_JSON" | jq -r '.port' 2>/dev/null || echo "")
+    RESOLVED_DOMAIN=$(echo "$CONFIG_JSON" | jq -r '.resolvedDomain' 2>/dev/null || echo "")
     
     # Extract gRPC server address
     if [ -n "$GRPC_SERVER_OVERRIDE" ]; then
@@ -386,6 +387,7 @@ fetch_config() {
         log_error "Unable to determine gRPC server address"
         log_error "API Base: $XHUB_API_BASE"
         [ -n "$GRPC_SERVER_OVERRIDE" ] && log_error "gRPC Override: $GRPC_SERVER_OVERRIDE"
+        [ -n "$RESOLVED_DOMAIN" ] && log_error "Resolved Domain: $RESOLVED_DOMAIN"
         exit 1
     fi
     
@@ -420,6 +422,7 @@ fetch_config() {
     log_info "├─ API Key: ${XHUB_API_KEY}..."
     log_info "├─ gRPC Server: $GRPC_SERVER"
     log_info "├─ gRPC Port: $GRPC_PORT"
+    log_info "├─ Resolved Domain: $RESOLVED_DOMAIN"
     log_info "├─ Root Path: $ROOT_PATH"
     log_info "└─ Port: $PORT"
     echo
@@ -516,6 +519,7 @@ uuid: $SERVER_ID
 xui_user: $XUI_USER
 xui_pass: $XUI_PASS
 xhub_api_key: $XHUB_API_KEY
+resolvedDomain: "$RESOLVED_DOMAIN"
 
 # gRPC connection configuration
 grpcServer: "$GRPC_SERVER"

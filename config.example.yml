@@ -19,6 +19,9 @@ grpcPort: 443              # gRPC server port (443 for production TLS, 9090 for 
 rootPath: "/xxxx"  # 3x-ui rootPath
 port: 12345                      # 3x-ui port number
 
+# DNS resolved domain for subscription reporting
+resolvedDomain: "xx.example.com"
+
 # Optional configuration (default values will be used if not set)
 
 # 3x-ui base IP address (default: 127.0.0.1)

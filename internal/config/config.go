@@ -10,12 +10,13 @@ import (
 // Config represents the Agent configuration structure
 type Config struct {
 	// Basic configuration
-	UUID       string `yaml:"uuid"`         // Agent unique identifier
-	XUIUser    string `yaml:"xui_user"`     // 3x-ui login username
-	XUIPass    string `yaml:"xui_pass"`     // 3x-ui login password
-	XHubAPIKey string `yaml:"xhub_api_key"` // xhub API key
-	GRPCServer string `yaml:"grpcServer"`   // gRPC server address
-	GRPCPort   int    `yaml:"grpcPort"`     // gRPC server port
+	UUID           string `yaml:"uuid"`           // Agent unique identifier
+	XUIUser        string `yaml:"xui_user"`       // 3x-ui login username
+	XUIPass        string `yaml:"xui_pass"`       // 3x-ui login password
+	XHubAPIKey     string `yaml:"xhub_api_key"`   // xhub API key
+	ResolvedDomain string `yaml:"resolvedDomain"` // DNS resolved domain for subscription reporting
+	GRPCServer     string `yaml:"grpcServer"`     // gRPC server address
+	GRPCPort       int    `yaml:"grpcPort"`       // gRPC server port
 
 	// 3x-ui connection configuration
 	RootPath string `yaml:"rootPath"` // 3x-ui rootPath
@@ -70,7 +71,7 @@ func (c *Config) applyDefaults() {
 func (c *Config) applySmartGRPCPortDefaults() {
 	// Check if this is a local server
 	isLocal := c.isLocalServer()
-	
+
 	if isLocal {
 		// Local development: keep existing port or default to 9090
 		if c.GRPCPort <= 0 {
@@ -116,7 +117,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("RootPath cannot be empty")
 	}
 	if c.Port <= 0 {
-		return fmt.Errorf("Port must be greater than 0")
+		return fmt.Errorf("port must be greater than 0")
 	}
 	return nil
 }

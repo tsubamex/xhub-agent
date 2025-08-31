@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -11,22 +12,26 @@ import (
 	"xhub-agent/internal/config"
 	"xhub-agent/internal/monitor"
 	"xhub-agent/internal/report"
+	"xhub-agent/internal/subscription"
 	"xhub-agent/pkg/logger"
 )
 
 // AgentService main Agent service
 type AgentService struct {
-	config        *config.Config
-	logger        *logger.Logger
-	authClient    *auth.XUIAuth
-	monitorClient *monitor.MonitorClient
-	reportClient  *report.ReportClient
+	config             *config.Config
+	logger             *logger.Logger
+	authClient         *auth.XUIAuth
+	monitorClient      *monitor.MonitorClient
+	reportClient       *report.ReportClient
+	subscriptionClient *subscription.SubscriptionClient
 
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wg         sync.WaitGroup
-	running    bool
-	runningMux sync.RWMutex
+	ctx               context.Context
+	cancel            context.CancelFunc
+	wg                sync.WaitGroup
+	running           bool
+	runningMux        sync.RWMutex
+	firstSubReport    bool       // 标记是否第一次获取订阅数据
+	firstSubReportMux sync.Mutex // 保护firstSubReport的并发访问
 }
 
 // NewAgentService creates a new Agent service
@@ -49,6 +54,9 @@ func NewAgentService(configPath, logFile string) (*AgentService, error) {
 	// Create monitoring client
 	monitorClient := monitor.NewMonitorClient(authClient)
 
+	// Create subscription client
+	subscriptionClient := subscription.NewSubscriptionClient(authClient)
+
 	// Create report client using gRPC server and port
 	grpcAddr := fmt.Sprintf("%s:%d", cfg.GRPCServer, cfg.GRPCPort)
 	reportClient := report.NewReportClient(grpcAddr, cfg.XHubAPIKey, log)
@@ -57,13 +65,14 @@ func NewAgentService(configPath, logFile string) (*AgentService, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &AgentService{
-		config:        cfg,
-		logger:        log,
-		authClient:    authClient,
-		monitorClient: monitorClient,
-		reportClient:  reportClient,
-		ctx:           ctx,
-		cancel:        cancel,
+		config:             cfg,
+		logger:             log,
+		authClient:         authClient,
+		monitorClient:      monitorClient,
+		reportClient:       reportClient,
+		subscriptionClient: subscriptionClient,
+		ctx:                ctx,
+		cancel:             cancel,
 	}, nil
 }
 
@@ -199,6 +208,85 @@ func (a *AgentService) executeOnce() {
 	}
 
 	a.logger.Debug("✅ Successfully reported data to xhub via gRPC")
+
+	// Report subscription data to xhub (includes current active subscriptions)
+	a.reportSubscriptionData()
+}
+
+// reportSubscriptionData gets and reports subscription data
+func (a *AgentService) reportSubscriptionData() {
+	a.logger.Debug("🔄 Starting subscription data collection and reporting")
+
+	// Get all subscription data
+	subscriptions, err := a.subscriptionClient.GetAllSubscriptionData()
+	if err != nil {
+		a.logger.Errorf("❌ Failed to get subscription data: %v", err)
+		return
+	}
+
+	if len(subscriptions) == 0 {
+		a.logger.Debug("📋 No subscription data found, skipping subscription report")
+		return
+	}
+
+	a.logger.Debugf("📋 Found %d unique subscriptions to report", len(subscriptions))
+
+	// Convert to report format
+	var reportSubs []report.SubscriptionData
+	for _, sub := range subscriptions {
+		reportSub := report.SubscriptionData{
+			SubID:      sub.SubID,
+			Email:      sub.Email,
+			NodeConfig: sub.NodeConfig,
+		}
+		reportSubs = append(reportSubs, reportSub)
+	}
+
+	// Check if this is the first time reporting subscription data
+	a.firstSubReportMux.Lock()
+	isFirst := !a.firstSubReport
+	if isFirst {
+		a.firstSubReport = true
+	}
+	a.firstSubReportMux.Unlock()
+
+	// Print subscription data summary
+	// a.logger.Infof("📋 Found %d subscription records to report", len(reportSubs))
+
+	// Show SubIDs only on first time or in debug mode
+	if isFirst {
+		var subIDs []string
+		for _, sub := range reportSubs {
+			subIDs = append(subIDs, sub.SubID)
+		}
+		a.logger.Infof("📋 SubIDs: %v", subIDs)
+	}
+
+	// Detailed information only in debug mode
+	for i, sub := range reportSubs {
+		configLength := len(sub.NodeConfig)
+		a.logger.Debugf("   📋 Subscription %d: SubID=%s, Email=%s, Config Length=%d bytes", i+1, sub.SubID, sub.Email, configLength)
+
+		// Decode and show first part of the config for verification (debug only)
+		if configLength > 0 {
+			decoded, err := base64.StdEncoding.DecodeString(sub.NodeConfig)
+			if err == nil && len(decoded) > 50 {
+				decodedPreview := string(decoded[:50]) + "..."
+				a.logger.Debugf("   📋 Config preview: %s", decodedPreview)
+			}
+		}
+	}
+
+	// Report data to xhub
+	a.logger.Debug("📡 Sending subscription data to xhub via gRPC...")
+	if err := a.reportClient.SendSubscriptionReport(a.config.UUID, reportSubs); err != nil {
+		a.logger.Errorf("❌ Failed to report subscription data via gRPC: %v", err)
+		a.logger.Errorf("   🎯 Server: %s:%d", a.config.GRPCServer, a.config.GRPCPort)
+		a.logger.Errorf("   🆔 UUID: %s", a.config.UUID)
+		return
+	}
+
+	a.logger.Debug("✅ Successfully reported subscription data to xhub via gRPC")
 }
 
 // ensureAuthenticated ensures authentication, attempts login if not authenticated

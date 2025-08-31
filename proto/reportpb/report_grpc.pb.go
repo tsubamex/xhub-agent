@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ReportService_SendReport_FullMethodName = "/reportpb.ReportService/SendReport"
+	ReportService_SendReport_FullMethodName             = "/reportpb.ReportService/SendReport"
+	ReportService_SendSubscriptionReport_FullMethodName = "/reportpb.ReportService/SendSubscriptionReport"
 )
 
 // ReportServiceClient is the client API for ReportService service.
@@ -30,6 +31,8 @@ const (
 type ReportServiceClient interface {
 	// SendReport sends server status data to xhub
 	SendReport(ctx context.Context, in *ReportRequest, opts ...grpc.CallOption) (*ReportResponse, error)
+	// SendSubscriptionReport sends subscription data to xhub
+	SendSubscriptionReport(ctx context.Context, in *SubscriptionReportRequest, opts ...grpc.CallOption) (*ReportResponse, error)
 }
 
 type reportServiceClient struct {
@@ -50,6 +53,16 @@ func (c *reportServiceClient) SendReport(ctx context.Context, in *ReportRequest,
 	return out, nil
 }
 
+func (c *reportServiceClient) SendSubscriptionReport(ctx context.Context, in *SubscriptionReportRequest, opts ...grpc.CallOption) (*ReportResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReportResponse)
+	err := c.cc.Invoke(ctx, ReportService_SendSubscriptionReport_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ReportServiceServer is the server API for ReportService service.
 // All implementations must embed UnimplementedReportServiceServer
 // for forward compatibility.
@@ -58,6 +71,8 @@ func (c *reportServiceClient) SendReport(ctx context.Context, in *ReportRequest,
 type ReportServiceServer interface {
 	// SendReport sends server status data to xhub
 	SendReport(context.Context, *ReportRequest) (*ReportResponse, error)
+	// SendSubscriptionReport sends subscription data to xhub
+	SendSubscriptionReport(context.Context, *SubscriptionReportRequest) (*ReportResponse, error)
 	mustEmbedUnimplementedReportServiceServer()
 }
 
@@ -70,6 +85,9 @@ type UnimplementedReportServiceServer struct{}
 
 func (UnimplementedReportServiceServer) SendReport(context.Context, *ReportRequest) (*ReportResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendReport not implemented")
+}
+func (UnimplementedReportServiceServer) SendSubscriptionReport(context.Context, *SubscriptionReportRequest) (*ReportResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendSubscriptionReport not implemented")
 }
 func (UnimplementedReportServiceServer) mustEmbedUnimplementedReportServiceServer() {}
 func (UnimplementedReportServiceServer) testEmbeddedByValue()                       {}
@@ -110,6 +128,24 @@ func _ReportService_SendReport_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ReportService_SendSubscriptionReport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SubscriptionReportRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReportServiceServer).SendSubscriptionReport(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ReportService_SendSubscriptionReport_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReportServiceServer).SendSubscriptionReport(ctx, req.(*SubscriptionReportRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ReportService_ServiceDesc is the grpc.ServiceDesc for ReportService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -120,6 +156,10 @@ var ReportService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendReport",
 			Handler:    _ReportService_SendReport_Handler,
+		},
+		{
+			MethodName: "SendSubscriptionReport",
+			Handler:    _ReportService_SendSubscriptionReport_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

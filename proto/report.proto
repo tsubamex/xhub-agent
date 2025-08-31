@@ -8,6 +8,9 @@ option go_package = "xhub-agent/proto/reportpb";
 service ReportService {
   // SendReport sends server status data to xhub
   rpc SendReport(ReportRequest) returns (ReportResponse);
+  
+  // SendSubscriptionReport sends subscription data to xhub
+  rpc SendSubscriptionReport(SubscriptionReportRequest) returns (ReportResponse);
 }
 
 // ReportRequest contains the data to be reported
@@ -90,4 +93,25 @@ message AppStats {
   int32 threads = 1;                  // Thread count
   int64 memory = 2;                   // Application memory usage
   int32 uptime = 3;                   // Application uptime
+}
+
+// SubscriptionReportRequest contains subscription data to be reported
+message SubscriptionReportRequest {
+  string uuid = 1;                    // Agent unique identifier
+  repeated SubscriptionData subscriptions = 2;  // Subscription data list
+}
+
+// SubscriptionData contains individual subscription information
+message SubscriptionData {
+  string sub_id = 1;                  // Subscription ID
+  string email = 2;                   // Client email
+  string node_config = 3;             // Base64 encoded node configuration
+  SubscriptionHeaders headers = 4;    // HTTP response headers
+}
+
+// SubscriptionHeaders contains HTTP response headers from subscription endpoint
+message SubscriptionHeaders {
+  string profile_title = 1;           // profile-title header (base64 encoded)
+  string profile_update_interval = 2; // profile-update-interval header
+  string subscription_userinfo = 3;   // subscription-userinfo header
 }

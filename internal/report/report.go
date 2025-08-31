@@ -317,3 +317,129 @@ func (r *ReportClient) SendReport(uuid string, data *monitor.ServerStatusData) e
 	r.logger.Debugf("🎉 Data successfully reported via gRPC!")
 	return nil
 }
+
+// SendSubscriptionReport sends subscription data to xhub via gRPC
+func (r *ReportClient) SendSubscriptionReport(uuid string, subscriptions []SubscriptionData) error {
+	r.logger.Debugf("📊 Starting gRPC subscription report transmission...")
+	r.logger.Debugf("🆔 Agent UUID: %s", uuid)
+	r.logger.Debugf("📡 Target Server: %s", r.serverAddr)
+	r.logger.Debugf("📋 Subscription Count: %d", len(subscriptions))
+
+	// Ensure connection is established
+	if err := r.Connect(); err != nil {
+		return fmt.Errorf("failed to establish gRPC connection: %w", err)
+	}
+
+	// Convert subscription data to protobuf format
+	r.logger.Debugf("🔄 Converting subscription data to protobuf format...")
+	var pbSubscriptions []*pb.SubscriptionData
+	for _, sub := range subscriptions {
+		pbHeaders := &pb.SubscriptionHeaders{
+			ProfileTitle:          sub.Headers.ProfileTitle,
+			ProfileUpdateInterval: sub.Headers.ProfileUpdateInterval,
+			SubscriptionUserinfo:  sub.Headers.SubscriptionUserinfo,
+		}
+
+		pbSub := &pb.SubscriptionData{
+			SubId:      sub.SubID,
+			Email:      sub.Email,
+			NodeConfig: sub.NodeConfig,
+			Headers:    pbHeaders,
+		}
+		pbSubscriptions = append(pbSubscriptions, pbSub)
+	}
+
+	// Create request
+	req := &pb.SubscriptionReportRequest{
+		Uuid:          uuid,
+		Subscriptions: pbSubscriptions,
+	}
+	r.logger.Debugf("📦 Created gRPC subscription request with UUID: %s", uuid)
+
+	// Create context with timeout and metadata for authentication
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Add API key to metadata for authentication
+	md := metadata.New(map[string]string{
+		"authorization": "Bearer " + r.apiKey,
+	})
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	// Debug: Log detailed request information
+	r.logger.Debugf("🚀 Sending gRPC subscription request...")
+	r.logger.Debugf("   🎯 Server: %s", r.serverAddr)
+	r.logger.Debugf("   🆔 UUID: %s", uuid)
+	r.logger.Debugf("   🔑 Auth: Bearer %s", r.apiKey)
+	r.logger.Debugf("   ⏱️  Timeout: 30 seconds")
+	r.logger.Debugf("   📋 Subscriptions: %d items", len(pbSubscriptions))
+
+	// Send gRPC request
+	resp, err := r.client.SendSubscriptionReport(ctx, req)
+	if err != nil {
+		r.logger.Errorf("❌ gRPC subscription request failed!")
+		r.logger.Errorf("   Server: %s", r.serverAddr)
+		r.logger.Errorf("   UUID: %s", uuid)
+
+		// Handle gRPC status errors
+		if st, ok := status.FromError(err); ok {
+			r.logger.Errorf("   gRPC Status: %s", st.Code())
+			r.logger.Errorf("   Error Message: %s", st.Message())
+
+			switch st.Code() {
+			case codes.Unauthenticated:
+				r.logger.Errorf("   🔑 Authentication failed - check API key")
+				return fmt.Errorf("authentication failed: API key invalid or expired")
+			case codes.InvalidArgument:
+				r.logger.Errorf("   📊 Invalid subscription data format")
+				return fmt.Errorf("request error: invalid subscription data format - %s", st.Message())
+			case codes.NotFound:
+				r.logger.Errorf("   🔍 Endpoint or UUID not found")
+				return fmt.Errorf("API endpoint not found: check if UUID is registered - %s", st.Message())
+			case codes.Internal:
+				r.logger.Errorf("   🔥 Internal server error")
+				return fmt.Errorf("server error: %s", st.Message())
+			case codes.DeadlineExceeded:
+				r.logger.Errorf("   ⏰ Request timeout exceeded")
+				return fmt.Errorf("request timeout: %s", st.Message())
+			case codes.Unavailable:
+				r.logger.Errorf("   🚫 Server unavailable")
+				return fmt.Errorf("server unavailable: %s", st.Message())
+			default:
+				r.logger.Errorf("   ❓ Unknown gRPC error")
+				return fmt.Errorf("gRPC error [%s]: %s", st.Code(), st.Message())
+			}
+		}
+		r.logger.Errorf("   Raw error: %v", err)
+		return fmt.Errorf("gRPC subscription request failed: %w", err)
+	}
+
+	// Debug: Log response details
+	r.logger.Debugf("✅ gRPC subscription response received")
+	r.logger.Debugf("   📊 Success: %t", resp.Success)
+	r.logger.Debugf("   💬 Message: %s", resp.Message)
+
+	// Check response
+	if !resp.Success {
+		r.logger.Errorf("❌ Server rejected the subscription report: %s", resp.Message)
+		return fmt.Errorf("subscription report failed: %s", resp.Message)
+	}
+
+	r.logger.Debugf("🎉 Subscription data successfully reported via gRPC!")
+	return nil
+}
+
+// SubscriptionData represents subscription information for reporting
+type SubscriptionData struct {
+	SubID      string              `json:"subId"`
+	Email      string              `json:"email"`
+	NodeConfig string              `json:"nodeConfig"` // base64编码的节点配置
+	Headers    SubscriptionHeaders `json:"headers"`    // HTTP响应头
+}
+
+// SubscriptionHeaders HTTP响应头信息
+type SubscriptionHeaders struct {
+	ProfileTitle          string `json:"profileTitle"`          // profile-title
+	ProfileUpdateInterval string `json:"profileUpdateInterval"` // profile-update-interval
+	SubscriptionUserinfo  string `json:"subscriptionUserinfo"`  // subscription-userinfo
+}

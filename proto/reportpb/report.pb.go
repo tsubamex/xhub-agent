@@ -732,6 +732,189 @@ func (x *AppStats) GetUptime() int32 {
 	return 0
 }
 
+// SubscriptionReportRequest contains subscription data to be reported
+type SubscriptionReportRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Uuid          string                 `protobuf:"bytes,1,opt,name=uuid,proto3" json:"uuid,omitempty"`                   // Agent unique identifier
+	Subscriptions []*SubscriptionData    `protobuf:"bytes,2,rep,name=subscriptions,proto3" json:"subscriptions,omitempty"` // Subscription data list
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubscriptionReportRequest) Reset() {
+	*x = SubscriptionReportRequest{}
+	mi := &file_proto_report_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubscriptionReportRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscriptionReportRequest) ProtoMessage() {}
+
+func (x *SubscriptionReportRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_report_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscriptionReportRequest.ProtoReflect.Descriptor instead.
+func (*SubscriptionReportRequest) Descriptor() ([]byte, []int) {
+	return file_proto_report_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *SubscriptionReportRequest) GetUuid() string {
+	if x != nil {
+		return x.Uuid
+	}
+	return ""
+}
+
+func (x *SubscriptionReportRequest) GetSubscriptions() []*SubscriptionData {
+	if x != nil {
+		return x.Subscriptions
+	}
+	return nil
+}
+
+// SubscriptionData contains individual subscription information
+type SubscriptionData struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SubId         string                 `protobuf:"bytes,1,opt,name=sub_id,json=subId,proto3" json:"sub_id,omitempty"`                // Subscription ID
+	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`                             // Client email
+	NodeConfig    string                 `protobuf:"bytes,3,opt,name=node_config,json=nodeConfig,proto3" json:"node_config,omitempty"` // Base64 encoded node configuration
+	Headers       *SubscriptionHeaders   `protobuf:"bytes,4,opt,name=headers,proto3" json:"headers,omitempty"`                         // HTTP response headers
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubscriptionData) Reset() {
+	*x = SubscriptionData{}
+	mi := &file_proto_report_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubscriptionData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscriptionData) ProtoMessage() {}
+
+func (x *SubscriptionData) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_report_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscriptionData.ProtoReflect.Descriptor instead.
+func (*SubscriptionData) Descriptor() ([]byte, []int) {
+	return file_proto_report_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SubscriptionData) GetSubId() string {
+	if x != nil {
+		return x.SubId
+	}
+	return ""
+}
+
+func (x *SubscriptionData) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *SubscriptionData) GetNodeConfig() string {
+	if x != nil {
+		return x.NodeConfig
+	}
+	return ""
+}
+
+func (x *SubscriptionData) GetHeaders() *SubscriptionHeaders {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+// SubscriptionHeaders contains HTTP response headers from subscription endpoint
+type SubscriptionHeaders struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	ProfileTitle          string                 `protobuf:"bytes,1,opt,name=profile_title,json=profileTitle,proto3" json:"profile_title,omitempty"`                              // profile-title header (base64 encoded)
+	ProfileUpdateInterval string                 `protobuf:"bytes,2,opt,name=profile_update_interval,json=profileUpdateInterval,proto3" json:"profile_update_interval,omitempty"` // profile-update-interval header
+	SubscriptionUserinfo  string                 `protobuf:"bytes,3,opt,name=subscription_userinfo,json=subscriptionUserinfo,proto3" json:"subscription_userinfo,omitempty"`      // subscription-userinfo header
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *SubscriptionHeaders) Reset() {
+	*x = SubscriptionHeaders{}
+	mi := &file_proto_report_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubscriptionHeaders) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubscriptionHeaders) ProtoMessage() {}
+
+func (x *SubscriptionHeaders) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_report_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubscriptionHeaders.ProtoReflect.Descriptor instead.
+func (*SubscriptionHeaders) Descriptor() ([]byte, []int) {
+	return file_proto_report_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SubscriptionHeaders) GetProfileTitle() string {
+	if x != nil {
+		return x.ProfileTitle
+	}
+	return ""
+}
+
+func (x *SubscriptionHeaders) GetProfileUpdateInterval() string {
+	if x != nil {
+		return x.ProfileUpdateInterval
+	}
+	return ""
+}
+
+func (x *SubscriptionHeaders) GetSubscriptionUserinfo() string {
+	if x != nil {
+		return x.SubscriptionUserinfo
+	}
+	return ""
+}
+
 var File_proto_report_proto protoreflect.FileDescriptor
 
 const file_proto_report_proto_rawDesc = "" +
@@ -790,10 +973,24 @@ const file_proto_report_proto_rawDesc = "" +
 	"\bAppStats\x12\x18\n" +
 	"\athreads\x18\x01 \x01(\x05R\athreads\x12\x16\n" +
 	"\x06memory\x18\x02 \x01(\x03R\x06memory\x12\x16\n" +
-	"\x06uptime\x18\x03 \x01(\x05R\x06uptime2P\n" +
+	"\x06uptime\x18\x03 \x01(\x05R\x06uptime\"q\n" +
+	"\x19SubscriptionReportRequest\x12\x12\n" +
+	"\x04uuid\x18\x01 \x01(\tR\x04uuid\x12@\n" +
+	"\rsubscriptions\x18\x02 \x03(\v2\x1a.reportpb.SubscriptionDataR\rsubscriptions\"\x99\x01\n" +
+	"\x10SubscriptionData\x12\x15\n" +
+	"\x06sub_id\x18\x01 \x01(\tR\x05subId\x12\x14\n" +
+	"\x05email\x18\x02 \x01(\tR\x05email\x12\x1f\n" +
+	"\vnode_config\x18\x03 \x01(\tR\n" +
+	"nodeConfig\x127\n" +
+	"\aheaders\x18\x04 \x01(\v2\x1d.reportpb.SubscriptionHeadersR\aheaders\"\xa7\x01\n" +
+	"\x13SubscriptionHeaders\x12#\n" +
+	"\rprofile_title\x18\x01 \x01(\tR\fprofileTitle\x126\n" +
+	"\x17profile_update_interval\x18\x02 \x01(\tR\x15profileUpdateInterval\x123\n" +
+	"\x15subscription_userinfo\x18\x03 \x01(\tR\x14subscriptionUserinfo2\xa9\x01\n" +
 	"\rReportService\x12?\n" +
 	"\n" +
-	"SendReport\x12\x17.reportpb.ReportRequest\x1a\x18.reportpb.ReportResponseB\x1bZ\x19xhub-agent/proto/reportpbb\x06proto3"
+	"SendReport\x12\x17.reportpb.ReportRequest\x1a\x18.reportpb.ReportResponse\x12W\n" +
+	"\x16SendSubscriptionReport\x12#.reportpb.SubscriptionReportRequest\x1a\x18.reportpb.ReportResponseB\x1bZ\x19xhub-agent/proto/reportpbb\x06proto3"
 
 var (
 	file_proto_report_proto_rawDescOnce sync.Once
@@ -807,19 +1004,22 @@ func file_proto_report_proto_rawDescGZIP() []byte {
 	return file_proto_report_proto_rawDescData
 }
 
-var file_proto_report_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_proto_report_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_proto_report_proto_goTypes = []any{
-	(*ReportRequest)(nil),    // 0: reportpb.ReportRequest
-	(*ReportResponse)(nil),   // 1: reportpb.ReportResponse
-	(*ServerStatusData)(nil), // 2: reportpb.ServerStatusData
-	(*MemoryInfo)(nil),       // 3: reportpb.MemoryInfo
-	(*SwapInfo)(nil),         // 4: reportpb.SwapInfo
-	(*DiskInfo)(nil),         // 5: reportpb.DiskInfo
-	(*NetIOInfo)(nil),        // 6: reportpb.NetIOInfo
-	(*NetTraffic)(nil),       // 7: reportpb.NetTraffic
-	(*XrayInfo)(nil),         // 8: reportpb.XrayInfo
-	(*PublicIPInfo)(nil),     // 9: reportpb.PublicIPInfo
-	(*AppStats)(nil),         // 10: reportpb.AppStats
+	(*ReportRequest)(nil),             // 0: reportpb.ReportRequest
+	(*ReportResponse)(nil),            // 1: reportpb.ReportResponse
+	(*ServerStatusData)(nil),          // 2: reportpb.ServerStatusData
+	(*MemoryInfo)(nil),                // 3: reportpb.MemoryInfo
+	(*SwapInfo)(nil),                  // 4: reportpb.SwapInfo
+	(*DiskInfo)(nil),                  // 5: reportpb.DiskInfo
+	(*NetIOInfo)(nil),                 // 6: reportpb.NetIOInfo
+	(*NetTraffic)(nil),                // 7: reportpb.NetTraffic
+	(*XrayInfo)(nil),                  // 8: reportpb.XrayInfo
+	(*PublicIPInfo)(nil),              // 9: reportpb.PublicIPInfo
+	(*AppStats)(nil),                  // 10: reportpb.AppStats
+	(*SubscriptionReportRequest)(nil), // 11: reportpb.SubscriptionReportRequest
+	(*SubscriptionData)(nil),          // 12: reportpb.SubscriptionData
+	(*SubscriptionHeaders)(nil),       // 13: reportpb.SubscriptionHeaders
 }
 var file_proto_report_proto_depIdxs = []int32{
 	2,  // 0: reportpb.ReportRequest.data:type_name -> reportpb.ServerStatusData
@@ -831,13 +1031,17 @@ var file_proto_report_proto_depIdxs = []int32{
 	9,  // 6: reportpb.ServerStatusData.public_ip:type_name -> reportpb.PublicIPInfo
 	8,  // 7: reportpb.ServerStatusData.xray:type_name -> reportpb.XrayInfo
 	10, // 8: reportpb.ServerStatusData.app_stats:type_name -> reportpb.AppStats
-	0,  // 9: reportpb.ReportService.SendReport:input_type -> reportpb.ReportRequest
-	1,  // 10: reportpb.ReportService.SendReport:output_type -> reportpb.ReportResponse
-	10, // [10:11] is the sub-list for method output_type
-	9,  // [9:10] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	12, // 9: reportpb.SubscriptionReportRequest.subscriptions:type_name -> reportpb.SubscriptionData
+	13, // 10: reportpb.SubscriptionData.headers:type_name -> reportpb.SubscriptionHeaders
+	0,  // 11: reportpb.ReportService.SendReport:input_type -> reportpb.ReportRequest
+	11, // 12: reportpb.ReportService.SendSubscriptionReport:input_type -> reportpb.SubscriptionReportRequest
+	1,  // 13: reportpb.ReportService.SendReport:output_type -> reportpb.ReportResponse
+	1,  // 14: reportpb.ReportService.SendSubscriptionReport:output_type -> reportpb.ReportResponse
+	13, // [13:15] is the sub-list for method output_type
+	11, // [11:13] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_proto_report_proto_init() }
@@ -851,7 +1055,7 @@ func file_proto_report_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_report_proto_rawDesc), len(file_proto_report_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

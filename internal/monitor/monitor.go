@@ -94,6 +94,13 @@ type AppStats struct {
 	Uptime  int   `json:"uptime"`  // Application uptime
 }
 
+// OnlineUsersResponse online users API response structure
+type OnlineUsersResponse struct {
+	Success bool     `json:"success"`
+	Message string   `json:"msg"`
+	Data    []string `json:"obj"` // Array of online user emails
+}
+
 // NewMonitorClient creates a new monitoring client
 func NewMonitorClient(authClient *auth.XUIAuth) *MonitorClient {
 	return &MonitorClient{
@@ -158,4 +165,61 @@ func (m *MonitorClient) GetServerStatus() (*ServerStatusResponse, error) {
 	}
 
 	return &statusResp, nil
+}
+
+// GetOnlineUsers gets online users from 3x-ui panel
+func (m *MonitorClient) GetOnlineUsers() (*OnlineUsersResponse, error) {
+	// Check authentication status
+	if !m.auth.IsAuthenticated() {
+		return nil, fmt.Errorf("not authenticated, please login first")
+	}
+
+	// Create authenticated request
+	req, err := m.auth.GetAuthenticatedRequest("POST", "/panel/inbound/onlines", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set required headers for this specific API
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+
+	// Send request
+	resp, err := m.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to request online users: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check HTTP status code
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, fmt.Errorf("not authenticated, session may have expired")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("request failed, HTTP status code: %d", resp.StatusCode)
+	}
+
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Print raw response body for debugging
+	fmt.Printf("[DEBUG] 3x-ui online users response body: %s\n", string(body))
+
+	// Parse response
+	var onlineResp OnlineUsersResponse
+	if err := json.Unmarshal(body, &onlineResp); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Check if API response is successful
+	if !onlineResp.Success {
+		return nil, fmt.Errorf("API error: %s", onlineResp.Message)
+	}
+
+	return &onlineResp, nil
 }

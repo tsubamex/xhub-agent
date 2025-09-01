@@ -211,6 +211,9 @@ func (a *AgentService) executeOnce() {
 
 	// Report subscription data to xhub (includes current active subscriptions)
 	a.reportSubscriptionData()
+
+	// Report online users data to xhub
+	a.reportOnlineUsersData()
 }
 
 // reportSubscriptionData gets and reports subscription data
@@ -302,6 +305,43 @@ func (a *AgentService) reportSubscriptionData() {
 	}
 
 	a.logger.Debug("✅ Successfully reported subscription data to xhub via gRPC")
+}
+
+// reportOnlineUsersData gets and reports online users data
+func (a *AgentService) reportOnlineUsersData() {
+	a.logger.Debug("🔄 Starting online users data collection and reporting")
+
+	// Get online users data
+	onlineResp, err := a.monitorClient.GetOnlineUsers()
+	if err != nil {
+		a.logger.Errorf("❌ Failed to get online users data: %v", err)
+
+		// If it's an authentication error, clear auth status for re-login in next cycle
+		if isAuthError(err) {
+			a.logger.Warn("🔑 Detected authentication error in online users check, will re-login in next cycle")
+		}
+		return
+	}
+
+	a.logger.Debugf("📋 Found %d online users", len(onlineResp.Data))
+
+	// Log online users for debugging (only in debug mode)
+	if len(onlineResp.Data) > 0 {
+		a.logger.Debugf("👥 Online users: %v", onlineResp.Data)
+	} else {
+		a.logger.Debug("👥 No users currently online")
+	}
+
+	// Report data to xhub
+	a.logger.Debug("📡 Sending online users data to xhub via gRPC...")
+	if err := a.reportClient.SendOnlineUsersReport(a.config.UUID, onlineResp.Data); err != nil {
+		a.logger.Errorf("❌ Failed to report online users data via gRPC: %v", err)
+		a.logger.Errorf("   🎯 Server: %s:%d", a.config.GRPCServer, a.config.GRPCPort)
+		a.logger.Errorf("   🆔 UUID: %s", a.config.UUID)
+		return
+	}
+
+	a.logger.Debug("✅ Successfully reported online users data to xhub via gRPC")
 }
 
 // ensureAuthenticated ensures authentication, attempts login if not authenticated

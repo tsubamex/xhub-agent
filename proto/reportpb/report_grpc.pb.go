@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v5.29.3
-// source: proto/report.proto
+// source: report.proto
 
 package reportpb
 
@@ -21,6 +21,7 @@ const _ = grpc.SupportPackageIsVersion9
 const (
 	ReportService_SendReport_FullMethodName             = "/reportpb.ReportService/SendReport"
 	ReportService_SendSubscriptionReport_FullMethodName = "/reportpb.ReportService/SendSubscriptionReport"
+	ReportService_SendOnlineUsersReport_FullMethodName  = "/reportpb.ReportService/SendOnlineUsersReport"
 )
 
 // ReportServiceClient is the client API for ReportService service.
@@ -33,6 +34,8 @@ type ReportServiceClient interface {
 	SendReport(ctx context.Context, in *ReportRequest, opts ...grpc.CallOption) (*ReportResponse, error)
 	// SendSubscriptionReport sends subscription data to xhub
 	SendSubscriptionReport(ctx context.Context, in *SubscriptionReportRequest, opts ...grpc.CallOption) (*ReportResponse, error)
+	// SendOnlineUsersReport sends online users data to xhub
+	SendOnlineUsersReport(ctx context.Context, in *OnlineUsersReportRequest, opts ...grpc.CallOption) (*ReportResponse, error)
 }
 
 type reportServiceClient struct {
@@ -63,6 +66,16 @@ func (c *reportServiceClient) SendSubscriptionReport(ctx context.Context, in *Su
 	return out, nil
 }
 
+func (c *reportServiceClient) SendOnlineUsersReport(ctx context.Context, in *OnlineUsersReportRequest, opts ...grpc.CallOption) (*ReportResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ReportResponse)
+	err := c.cc.Invoke(ctx, ReportService_SendOnlineUsersReport_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ReportServiceServer is the server API for ReportService service.
 // All implementations must embed UnimplementedReportServiceServer
 // for forward compatibility.
@@ -73,6 +86,8 @@ type ReportServiceServer interface {
 	SendReport(context.Context, *ReportRequest) (*ReportResponse, error)
 	// SendSubscriptionReport sends subscription data to xhub
 	SendSubscriptionReport(context.Context, *SubscriptionReportRequest) (*ReportResponse, error)
+	// SendOnlineUsersReport sends online users data to xhub
+	SendOnlineUsersReport(context.Context, *OnlineUsersReportRequest) (*ReportResponse, error)
 	mustEmbedUnimplementedReportServiceServer()
 }
 
@@ -88,6 +103,9 @@ func (UnimplementedReportServiceServer) SendReport(context.Context, *ReportReque
 }
 func (UnimplementedReportServiceServer) SendSubscriptionReport(context.Context, *SubscriptionReportRequest) (*ReportResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendSubscriptionReport not implemented")
+}
+func (UnimplementedReportServiceServer) SendOnlineUsersReport(context.Context, *OnlineUsersReportRequest) (*ReportResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SendOnlineUsersReport not implemented")
 }
 func (UnimplementedReportServiceServer) mustEmbedUnimplementedReportServiceServer() {}
 func (UnimplementedReportServiceServer) testEmbeddedByValue()                       {}
@@ -146,6 +164,24 @@ func _ReportService_SendSubscriptionReport_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ReportService_SendOnlineUsersReport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(OnlineUsersReportRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ReportServiceServer).SendOnlineUsersReport(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ReportService_SendOnlineUsersReport_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ReportServiceServer).SendOnlineUsersReport(ctx, req.(*OnlineUsersReportRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ReportService_ServiceDesc is the grpc.ServiceDesc for ReportService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -161,7 +197,11 @@ var ReportService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "SendSubscriptionReport",
 			Handler:    _ReportService_SendSubscriptionReport_Handler,
 		},
+		{
+			MethodName: "SendOnlineUsersReport",
+			Handler:    _ReportService_SendOnlineUsersReport_Handler,
+		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "proto/report.proto",
+	Metadata: "report.proto",
 }

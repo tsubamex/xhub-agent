@@ -429,6 +429,102 @@ func (r *ReportClient) SendSubscriptionReport(uuid string, subscriptions []Subsc
 	return nil
 }
 
+// SendOnlineUsersReport sends online users data to xhub via gRPC
+func (r *ReportClient) SendOnlineUsersReport(uuid string, onlineEmails []string) error {
+	r.logger.Debugf("📊 Starting gRPC online users report transmission...")
+	r.logger.Debugf("🆔 Agent UUID: %s", uuid)
+	r.logger.Debugf("📡 Target Server: %s", r.serverAddr)
+	r.logger.Debugf("👥 Online Users Count: %d", len(onlineEmails))
+
+	// Ensure connection is established
+	if err := r.Connect(); err != nil {
+		return fmt.Errorf("failed to establish gRPC connection: %w", err)
+	}
+
+	// Create request
+	req := &pb.OnlineUsersReportRequest{
+		Uuid:         uuid,
+		OnlineEmails: onlineEmails,
+	}
+	r.logger.Debugf("📦 Created gRPC online users request with UUID: %s", uuid)
+
+	// Create context with timeout and metadata for authentication
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Add API key to metadata for authentication
+	md := metadata.New(map[string]string{
+		"authorization": "Bearer " + r.apiKey,
+	})
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	// Debug: Log detailed request information
+	r.logger.Debugf("🚀 Sending gRPC online users request...")
+	r.logger.Debugf("   🎯 Server: %s", r.serverAddr)
+	r.logger.Debugf("   🆔 UUID: %s", uuid)
+	r.logger.Debugf("   🔑 Auth: Bearer %s", r.apiKey)
+	r.logger.Debugf("   ⏱️  Timeout: 30 seconds")
+	if len(onlineEmails) > 0 {
+		r.logger.Debugf("   👥 Online Users: %v", onlineEmails)
+	} else {
+		r.logger.Debugf("   👥 Online Users: (empty - no users online)")
+	}
+
+	// Send gRPC request
+	resp, err := r.client.SendOnlineUsersReport(ctx, req)
+	if err != nil {
+		r.logger.Errorf("❌ gRPC online users request failed!")
+		r.logger.Errorf("   Server: %s", r.serverAddr)
+		r.logger.Errorf("   UUID: %s", uuid)
+
+		// Handle gRPC status errors
+		if st, ok := status.FromError(err); ok {
+			r.logger.Errorf("   gRPC Status: %s", st.Code())
+			r.logger.Errorf("   Error Message: %s", st.Message())
+
+			switch st.Code() {
+			case codes.Unauthenticated:
+				r.logger.Errorf("   🔑 Authentication failed - check API key")
+				return fmt.Errorf("authentication failed: API key invalid or expired")
+			case codes.InvalidArgument:
+				r.logger.Errorf("   📊 Invalid online users data format")
+				return fmt.Errorf("request error: invalid online users data format - %s", st.Message())
+			case codes.NotFound:
+				r.logger.Errorf("   🔍 Endpoint or UUID not found")
+				return fmt.Errorf("API endpoint not found: check if UUID is registered - %s", st.Message())
+			case codes.Internal:
+				r.logger.Errorf("   🔥 Internal server error")
+				return fmt.Errorf("server error: %s", st.Message())
+			case codes.DeadlineExceeded:
+				r.logger.Errorf("   ⏰ Request timeout exceeded")
+				return fmt.Errorf("request timeout: %s", st.Message())
+			case codes.Unavailable:
+				r.logger.Errorf("   🚫 Server unavailable")
+				return fmt.Errorf("server unavailable: %s", st.Message())
+			default:
+				r.logger.Errorf("   ❓ Unknown gRPC error")
+				return fmt.Errorf("gRPC error [%s]: %s", st.Code(), st.Message())
+			}
+		}
+		r.logger.Errorf("   Raw error: %v", err)
+		return fmt.Errorf("gRPC online users request failed: %w", err)
+	}
+
+	// Debug: Log response details
+	r.logger.Debugf("✅ gRPC online users response received")
+	r.logger.Debugf("   📊 Success: %t", resp.Success)
+	r.logger.Debugf("   💬 Message: %s", resp.Message)
+
+	// Check response
+	if !resp.Success {
+		r.logger.Errorf("❌ Server rejected the online users report: %s", resp.Message)
+		return fmt.Errorf("online users report failed: %s", resp.Message)
+	}
+
+	r.logger.Debugf("🎉 Online users data successfully reported via gRPC!")
+	return nil
+}
+
 // SubscriptionData represents subscription information for reporting
 type SubscriptionData struct {
 	SubID      string              `json:"subId"`

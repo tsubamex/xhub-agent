@@ -11,6 +11,9 @@ service ReportService {
   
   // SendSubscriptionReport sends subscription data to xhub
   rpc SendSubscriptionReport(SubscriptionReportRequest) returns (ReportResponse);
+  
+  // SendOnlineUsersReport sends online users data to xhub
+  rpc SendOnlineUsersReport(OnlineUsersReportRequest) returns (ReportResponse);
 }
 
 // ReportRequest contains the data to be reported
@@ -114,4 +117,10 @@ message SubscriptionHeaders {
   string profile_title = 1;           // profile-title header (base64 encoded)
   string profile_update_interval = 2; // profile-update-interval header
   string subscription_userinfo = 3;   // subscription-userinfo header
+}
+
+// OnlineUsersReportRequest contains online users data to be reported
+message OnlineUsersReportRequest {
+  string uuid = 1;                    // Agent unique identifier
+  repeated string online_emails = 2;  // Online user emails list
 }

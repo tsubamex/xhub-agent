@@ -365,7 +365,7 @@ func (r *ReportClient) SendReport(uuid string, data *monitor.ServerStatusData) e
 				}
 			}
 
-			return fmt.Errorf(errorMsg)
+			return fmt.Errorf("%s", errorMsg)
 		}
 
 		// Handle non-gRPC errors
@@ -509,7 +509,7 @@ func (r *ReportClient) SendSubscriptionReport(uuid string, subscriptions []Subsc
 				}
 			}
 
-			return fmt.Errorf(errorMsg)
+			return fmt.Errorf("%s", errorMsg)
 		}
 
 		// Handle non-gRPC errors
@@ -638,7 +638,7 @@ func (r *ReportClient) SendOnlineUsersReport(uuid string, onlineEmails []string)
 				}
 			}
 
-			return fmt.Errorf(errorMsg)
+			return fmt.Errorf("%s", errorMsg)
 		}
 
 		// Handle non-gRPC errors

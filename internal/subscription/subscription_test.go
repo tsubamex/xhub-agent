@@ -1,11 +1,30 @@
 package subscription
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"xhub-agent/pkg/logger"
 )
 
 func TestExtractUniqueSubIDs(t *testing.T) {
-	s := &SubscriptionClient{resolvedDomain: "test.example.com"}
+	// Create temporary log file for testing
+	tmpDir, err := os.MkdirTemp("", "subscription-test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+	
+	logFile := filepath.Join(tmpDir, "test.log")
+	testLogger, err := logger.NewLogger(logFile, "debug")
+	require.NoError(t, err)
+	defer testLogger.Close()
+
+	s := &SubscriptionClient{
+		resolvedDomain: "test.example.com",
+		logger:         testLogger,
+	}
 
 	// Test data
 	inbounds := []*InboundInfo{

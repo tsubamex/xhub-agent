@@ -3,13 +3,30 @@ package monitor
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"xhub-agent/internal/auth"
+	"xhub-agent/pkg/logger"
 )
+
+// createTestLogger creates a logger for testing
+func createTestLogger(t *testing.T) *logger.Logger {
+	// Create temporary log file
+	tmpDir, err := os.MkdirTemp("", "monitor-test")
+	require.NoError(t, err)
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	logFile := filepath.Join(tmpDir, "test.log")
+	log, err := logger.NewLogger(logFile, "debug")
+	require.NoError(t, err)
+
+	return log
+}
 
 func TestMonitorClient_GetServerStatus_Success(t *testing.T) {
 	// 模拟3x-ui服务器状态API
@@ -85,8 +102,10 @@ func TestMonitorClient_GetServerStatus_Success(t *testing.T) {
 	// 手动设置session token（跳过实际登录）
 	authClient.SetSessionForTesting("test-session-token")
 
-	// 创建监控客户端
-	monitorClient := NewMonitorClient(authClient)
+	// 创建测试logger和监控客户端
+	testLogger := createTestLogger(t)
+	defer testLogger.Close()
+	monitorClient := NewMonitorClient(authClient, testLogger)
 
 	// GetServerStatus gets server status
 	status, err := monitorClient.GetServerStatus()
@@ -135,7 +154,9 @@ func TestMonitorClient_GetServerStatus_AuthenticationError(t *testing.T) {
 
 	// 创建未认证的客户端
 	authClient := auth.NewXUIAuth(server.URL, "admin", "password123")
-	monitorClient := NewMonitorClient(authClient)
+	testLogger := createTestLogger(t)
+	defer testLogger.Close()
+	monitorClient := NewMonitorClient(authClient, testLogger)
 
 	// 尝试获取服务器状态
 	_, err := monitorClient.GetServerStatus()
@@ -155,7 +176,9 @@ func TestMonitorClient_GetServerStatus_ServerError(t *testing.T) {
 	authClient := auth.NewXUIAuth(server.URL, "admin", "password123")
 	authClient.SetSessionForTesting("test-session-token")
 
-	monitorClient := NewMonitorClient(authClient)
+	testLogger := createTestLogger(t)
+	defer testLogger.Close()
+	monitorClient := NewMonitorClient(authClient, testLogger)
 
 	// 尝试获取服务器状态
 	_, err := monitorClient.GetServerStatus()
@@ -175,7 +198,9 @@ func TestMonitorClient_GetServerStatus_InvalidJSON(t *testing.T) {
 	authClient := auth.NewXUIAuth(server.URL, "admin", "password123")
 	authClient.SetSessionForTesting("test-session-token")
 
-	monitorClient := NewMonitorClient(authClient)
+	testLogger := createTestLogger(t)
+	defer testLogger.Close()
+	monitorClient := NewMonitorClient(authClient, testLogger)
 
 	// 尝试获取服务器状态
 	_, err := monitorClient.GetServerStatus()
@@ -196,7 +221,9 @@ func TestMonitorClient_GetServerStatus_APIError(t *testing.T) {
 	authClient := auth.NewXUIAuth(server.URL, "admin", "password123")
 	authClient.SetSessionForTesting("test-session-token")
 
-	monitorClient := NewMonitorClient(authClient)
+	testLogger := createTestLogger(t)
+	defer testLogger.Close()
+	monitorClient := NewMonitorClient(authClient, testLogger)
 
 	// 尝试获取服务器状态
 	_, err := monitorClient.GetServerStatus()

@@ -31,6 +31,10 @@ type ReportClient struct {
 	isConnected     bool      // track connection state to avoid repeated logs
 	lastConnectTime time.Time // track last successful connection
 	useTLS          bool      // whether to use TLS encryption
+	// Error state tracking fields
+	lastErrorState string // track last error state to avoid duplicate logs
+	hasLoggedError bool   // track if error has been logged for current failure
+	wasSuccessful  bool   // track if last operation was successful
 }
 
 // NewReportClient creates a new report client
@@ -52,10 +56,11 @@ func NewReportClient(serverAddr, apiKey string, log *logger.Logger) *ReportClien
 	useTLS := shouldUseTLS(serverAddr)
 
 	return &ReportClient{
-		serverAddr: serverAddr,
-		apiKey:     apiKey,
-		logger:     log,
-		useTLS:     useTLS,
+		serverAddr:    serverAddr,
+		apiKey:        apiKey,
+		logger:        log,
+		useTLS:        useTLS,
+		wasSuccessful: true, // assume success initially
 	}
 }
 
@@ -171,13 +176,18 @@ func (r *ReportClient) Connect() error {
 	conn, err := grpc.NewClient(r.serverAddr, grpc.WithTransportCredentials(creds))
 	if err != nil {
 		r.isConnected = false
-		r.logger.Errorf("❌ gRPC client creation failed!")
-		r.logger.Errorf("   Server: %s", r.serverAddr)
-		r.logger.Errorf("   Error: %v", err)
-		r.logger.Errorf("   Please check:")
-		r.logger.Errorf("   1. Server address format is correct (host:port)")
-		r.logger.Errorf("   2. No HTTP protocol prefix in address")
-		r.logger.Errorf("   3. Address doesn't contain URL paths")
+
+		// Only log detailed connection error if it should be logged (deduplication check)
+		errorKey := fmt.Sprintf("connect_%s", r.serverAddr)
+		if r.shouldLogError(errorKey) {
+			r.logger.Errorf("❌ gRPC client creation failed!")
+			r.logger.Errorf("   Server: %s", r.serverAddr)
+			r.logger.Errorf("   Error: %v", err)
+			r.logger.Errorf("   Please check:")
+			r.logger.Errorf("   1. Server address format is correct (host:port)")
+			r.logger.Errorf("   2. No HTTP protocol prefix in address")
+			r.logger.Errorf("   3. Address doesn't contain URL paths")
+		}
 		return fmt.Errorf("failed to create gRPC client: %w", err)
 	}
 
@@ -201,6 +211,9 @@ func (r *ReportClient) Connect() error {
 
 	r.isConnected = true
 	r.lastConnectTime = time.Now()
+
+	// Mark connection success
+	r.markSuccess("gRPC连接")
 	return nil
 }
 
@@ -215,6 +228,41 @@ func (r *ReportClient) Close() error {
 		return err
 	}
 	return nil
+}
+
+// shouldLogError determines if an error should be logged
+// Returns true only for the first occurrence of an error state
+func (r *ReportClient) shouldLogError(errorKey string) bool {
+	// If this is a different error state, always log it
+	if r.lastErrorState != errorKey {
+		r.lastErrorState = errorKey
+		r.hasLoggedError = true
+		r.wasSuccessful = false
+		return true
+	}
+
+	// If same error state and we haven't logged it yet, log it
+	if !r.hasLoggedError {
+		r.hasLoggedError = true
+		r.wasSuccessful = false
+		return true
+	}
+
+	// Don't log repeated errors
+	return false
+}
+
+// markSuccess marks an operation as successful and logs recovery if needed
+func (r *ReportClient) markSuccess(operationType string) {
+	// If we were in error state, log the recovery
+	if !r.wasSuccessful {
+		r.logger.Infof("✅ %s 操作已恢复正常", operationType)
+	}
+
+	// Reset error state
+	r.lastErrorState = ""
+	r.hasLoggedError = false
+	r.wasSuccessful = true
 }
 
 // SendReport sends monitoring data to xhub via gRPC
@@ -266,40 +314,68 @@ func (r *ReportClient) SendReport(uuid string, data *monitor.ServerStatusData) e
 	// Send gRPC request
 	resp, err := r.client.SendReport(ctx, req)
 	if err != nil {
-		r.logger.Errorf("❌ gRPC request failed!")
-		r.logger.Errorf("   Server: %s", r.serverAddr)
-		r.logger.Errorf("   UUID: %s", uuid)
+		// Create error key for deduplication
+		var errorKey string
+		var errorMsg string
 
 		// Handle gRPC status errors
 		if st, ok := status.FromError(err); ok {
-			r.logger.Errorf("   gRPC Status: %s", st.Code())
-			r.logger.Errorf("   Error Message: %s", st.Message())
+			errorKey = fmt.Sprintf("grpc_%s_%s", st.Code(), r.serverAddr)
 
 			switch st.Code() {
 			case codes.Unauthenticated:
-				r.logger.Errorf("   🔑 Authentication failed - check API key")
-				return fmt.Errorf("authentication failed: API key invalid or expired")
+				errorMsg = "authentication failed: API key invalid or expired"
 			case codes.InvalidArgument:
-				r.logger.Errorf("   📊 Invalid data format")
-				return fmt.Errorf("request error: invalid data format - %s", st.Message())
+				errorMsg = fmt.Sprintf("request error: invalid data format - %s", st.Message())
 			case codes.NotFound:
-				r.logger.Errorf("   🔍 Endpoint or UUID not found")
-				return fmt.Errorf("API endpoint not found: check if UUID is registered - %s", st.Message())
+				errorMsg = fmt.Sprintf("API endpoint not found: check if UUID is registered - %s", st.Message())
 			case codes.Internal:
-				r.logger.Errorf("   🔥 Internal server error")
-				return fmt.Errorf("server error: %s", st.Message())
+				errorMsg = fmt.Sprintf("server error: %s", st.Message())
 			case codes.DeadlineExceeded:
-				r.logger.Errorf("   ⏰ Request timeout exceeded")
-				return fmt.Errorf("request timeout: %s", st.Message())
+				errorMsg = fmt.Sprintf("request timeout: %s", st.Message())
 			case codes.Unavailable:
-				r.logger.Errorf("   🚫 Server unavailable")
-				return fmt.Errorf("server unavailable: %s", st.Message())
+				errorMsg = fmt.Sprintf("server unavailable: %s", st.Message())
 			default:
-				r.logger.Errorf("   ❓ Unknown gRPC error")
-				return fmt.Errorf("gRPC error [%s]: %s", st.Code(), st.Message())
+				errorMsg = fmt.Sprintf("gRPC error [%s]: %s", st.Code(), st.Message())
 			}
+
+			// Only log detailed error if it should be logged (deduplication check)
+			if r.shouldLogError(errorKey) {
+				r.logger.Errorf("❌ gRPC request failed!")
+				r.logger.Errorf("   Server: %s", r.serverAddr)
+				r.logger.Errorf("   UUID: %s", uuid)
+				r.logger.Errorf("   gRPC Status: %s", st.Code())
+				r.logger.Errorf("   Error Message: %s", st.Message())
+
+				switch st.Code() {
+				case codes.Unauthenticated:
+					r.logger.Errorf("   🔑 Authentication failed - check API key")
+				case codes.InvalidArgument:
+					r.logger.Errorf("   📊 Invalid data format")
+				case codes.NotFound:
+					r.logger.Errorf("   🔍 Endpoint or UUID not found")
+				case codes.Internal:
+					r.logger.Errorf("   🔥 Internal server error")
+				case codes.DeadlineExceeded:
+					r.logger.Errorf("   ⏰ Request timeout exceeded")
+				case codes.Unavailable:
+					r.logger.Errorf("   🚫 Server unavailable")
+				default:
+					r.logger.Errorf("   ❓ Unknown gRPC error")
+				}
+			}
+
+			return fmt.Errorf(errorMsg)
 		}
-		r.logger.Errorf("   Raw error: %v", err)
+
+		// Handle non-gRPC errors
+		errorKey = fmt.Sprintf("generic_%s", r.serverAddr)
+		if r.shouldLogError(errorKey) {
+			r.logger.Errorf("❌ gRPC request failed!")
+			r.logger.Errorf("   Server: %s", r.serverAddr)
+			r.logger.Errorf("   UUID: %s", uuid)
+			r.logger.Errorf("   Raw error: %v", err)
+		}
 		return fmt.Errorf("gRPC request failed: %w", err)
 	}
 
@@ -310,10 +386,15 @@ func (r *ReportClient) SendReport(uuid string, data *monitor.ServerStatusData) e
 
 	// Check response
 	if !resp.Success {
-		r.logger.Errorf("❌ Server rejected the report: %s", resp.Message)
+		errorKey := fmt.Sprintf("server_reject_%s", r.serverAddr)
+		if r.shouldLogError(errorKey) {
+			r.logger.Errorf("❌ Server rejected the report: %s", resp.Message)
+		}
 		return fmt.Errorf("report failed: %s", resp.Message)
 	}
 
+	// Mark success and log recovery if needed
+	r.markSuccess("监控数据上报")
 	r.logger.Debugf("🎉 Data successfully reported via gRPC!")
 	return nil
 }
@@ -377,40 +458,68 @@ func (r *ReportClient) SendSubscriptionReport(uuid string, subscriptions []Subsc
 	// Send gRPC request
 	resp, err := r.client.SendSubscriptionReport(ctx, req)
 	if err != nil {
-		r.logger.Errorf("❌ gRPC subscription request failed!")
-		r.logger.Errorf("   Server: %s", r.serverAddr)
-		r.logger.Errorf("   UUID: %s", uuid)
+		// Create error key for deduplication
+		var errorKey string
+		var errorMsg string
 
 		// Handle gRPC status errors
 		if st, ok := status.FromError(err); ok {
-			r.logger.Errorf("   gRPC Status: %s", st.Code())
-			r.logger.Errorf("   Error Message: %s", st.Message())
+			errorKey = fmt.Sprintf("grpc_sub_%s_%s", st.Code(), r.serverAddr)
 
 			switch st.Code() {
 			case codes.Unauthenticated:
-				r.logger.Errorf("   🔑 Authentication failed - check API key")
-				return fmt.Errorf("authentication failed: API key invalid or expired")
+				errorMsg = "authentication failed: API key invalid or expired"
 			case codes.InvalidArgument:
-				r.logger.Errorf("   📊 Invalid subscription data format")
-				return fmt.Errorf("request error: invalid subscription data format - %s", st.Message())
+				errorMsg = fmt.Sprintf("request error: invalid subscription data format - %s", st.Message())
 			case codes.NotFound:
-				r.logger.Errorf("   🔍 Endpoint or UUID not found")
-				return fmt.Errorf("API endpoint not found: check if UUID is registered - %s", st.Message())
+				errorMsg = fmt.Sprintf("API endpoint not found: check if UUID is registered - %s", st.Message())
 			case codes.Internal:
-				r.logger.Errorf("   🔥 Internal server error")
-				return fmt.Errorf("server error: %s", st.Message())
+				errorMsg = fmt.Sprintf("server error: %s", st.Message())
 			case codes.DeadlineExceeded:
-				r.logger.Errorf("   ⏰ Request timeout exceeded")
-				return fmt.Errorf("request timeout: %s", st.Message())
+				errorMsg = fmt.Sprintf("request timeout: %s", st.Message())
 			case codes.Unavailable:
-				r.logger.Errorf("   🚫 Server unavailable")
-				return fmt.Errorf("server unavailable: %s", st.Message())
+				errorMsg = fmt.Sprintf("server unavailable: %s", st.Message())
 			default:
-				r.logger.Errorf("   ❓ Unknown gRPC error")
-				return fmt.Errorf("gRPC error [%s]: %s", st.Code(), st.Message())
+				errorMsg = fmt.Sprintf("gRPC error [%s]: %s", st.Code(), st.Message())
 			}
+
+			// Only log detailed error if it should be logged (deduplication check)
+			if r.shouldLogError(errorKey) {
+				r.logger.Errorf("❌ gRPC subscription request failed!")
+				r.logger.Errorf("   Server: %s", r.serverAddr)
+				r.logger.Errorf("   UUID: %s", uuid)
+				r.logger.Errorf("   gRPC Status: %s", st.Code())
+				r.logger.Errorf("   Error Message: %s", st.Message())
+
+				switch st.Code() {
+				case codes.Unauthenticated:
+					r.logger.Errorf("   🔑 Authentication failed - check API key")
+				case codes.InvalidArgument:
+					r.logger.Errorf("   📊 Invalid subscription data format")
+				case codes.NotFound:
+					r.logger.Errorf("   🔍 Endpoint or UUID not found")
+				case codes.Internal:
+					r.logger.Errorf("   🔥 Internal server error")
+				case codes.DeadlineExceeded:
+					r.logger.Errorf("   ⏰ Request timeout exceeded")
+				case codes.Unavailable:
+					r.logger.Errorf("   🚫 Server unavailable")
+				default:
+					r.logger.Errorf("   ❓ Unknown gRPC error")
+				}
+			}
+
+			return fmt.Errorf(errorMsg)
 		}
-		r.logger.Errorf("   Raw error: %v", err)
+
+		// Handle non-gRPC errors
+		errorKey = fmt.Sprintf("generic_sub_%s", r.serverAddr)
+		if r.shouldLogError(errorKey) {
+			r.logger.Errorf("❌ gRPC subscription request failed!")
+			r.logger.Errorf("   Server: %s", r.serverAddr)
+			r.logger.Errorf("   UUID: %s", uuid)
+			r.logger.Errorf("   Raw error: %v", err)
+		}
 		return fmt.Errorf("gRPC subscription request failed: %w", err)
 	}
 
@@ -421,10 +530,15 @@ func (r *ReportClient) SendSubscriptionReport(uuid string, subscriptions []Subsc
 
 	// Check response
 	if !resp.Success {
-		r.logger.Errorf("❌ Server rejected the subscription report: %s", resp.Message)
+		errorKey := fmt.Sprintf("server_reject_sub_%s", r.serverAddr)
+		if r.shouldLogError(errorKey) {
+			r.logger.Errorf("❌ Server rejected the subscription report: %s", resp.Message)
+		}
 		return fmt.Errorf("subscription report failed: %s", resp.Message)
 	}
 
+	// Mark success and log recovery if needed
+	r.markSuccess("订阅数据上报")
 	r.logger.Debugf("🎉 Subscription data successfully reported via gRPC!")
 	return nil
 }
@@ -473,40 +587,68 @@ func (r *ReportClient) SendOnlineUsersReport(uuid string, onlineEmails []string)
 	// Send gRPC request
 	resp, err := r.client.SendOnlineUsersReport(ctx, req)
 	if err != nil {
-		r.logger.Errorf("❌ gRPC online users request failed!")
-		r.logger.Errorf("   Server: %s", r.serverAddr)
-		r.logger.Errorf("   UUID: %s", uuid)
+		// Create error key for deduplication
+		var errorKey string
+		var errorMsg string
 
 		// Handle gRPC status errors
 		if st, ok := status.FromError(err); ok {
-			r.logger.Errorf("   gRPC Status: %s", st.Code())
-			r.logger.Errorf("   Error Message: %s", st.Message())
+			errorKey = fmt.Sprintf("grpc_users_%s_%s", st.Code(), r.serverAddr)
 
 			switch st.Code() {
 			case codes.Unauthenticated:
-				r.logger.Errorf("   🔑 Authentication failed - check API key")
-				return fmt.Errorf("authentication failed: API key invalid or expired")
+				errorMsg = "authentication failed: API key invalid or expired"
 			case codes.InvalidArgument:
-				r.logger.Errorf("   📊 Invalid online users data format")
-				return fmt.Errorf("request error: invalid online users data format - %s", st.Message())
+				errorMsg = fmt.Sprintf("request error: invalid online users data format - %s", st.Message())
 			case codes.NotFound:
-				r.logger.Errorf("   🔍 Endpoint or UUID not found")
-				return fmt.Errorf("API endpoint not found: check if UUID is registered - %s", st.Message())
+				errorMsg = fmt.Sprintf("API endpoint not found: check if UUID is registered - %s", st.Message())
 			case codes.Internal:
-				r.logger.Errorf("   🔥 Internal server error")
-				return fmt.Errorf("server error: %s", st.Message())
+				errorMsg = fmt.Sprintf("server error: %s", st.Message())
 			case codes.DeadlineExceeded:
-				r.logger.Errorf("   ⏰ Request timeout exceeded")
-				return fmt.Errorf("request timeout: %s", st.Message())
+				errorMsg = fmt.Sprintf("request timeout: %s", st.Message())
 			case codes.Unavailable:
-				r.logger.Errorf("   🚫 Server unavailable")
-				return fmt.Errorf("server unavailable: %s", st.Message())
+				errorMsg = fmt.Sprintf("server unavailable: %s", st.Message())
 			default:
-				r.logger.Errorf("   ❓ Unknown gRPC error")
-				return fmt.Errorf("gRPC error [%s]: %s", st.Code(), st.Message())
+				errorMsg = fmt.Sprintf("gRPC error [%s]: %s", st.Code(), st.Message())
 			}
+
+			// Only log detailed error if it should be logged (deduplication check)
+			if r.shouldLogError(errorKey) {
+				r.logger.Errorf("❌ gRPC online users request failed!")
+				r.logger.Errorf("   Server: %s", r.serverAddr)
+				r.logger.Errorf("   UUID: %s", uuid)
+				r.logger.Errorf("   gRPC Status: %s", st.Code())
+				r.logger.Errorf("   Error Message: %s", st.Message())
+
+				switch st.Code() {
+				case codes.Unauthenticated:
+					r.logger.Errorf("   🔑 Authentication failed - check API key")
+				case codes.InvalidArgument:
+					r.logger.Errorf("   📊 Invalid online users data format")
+				case codes.NotFound:
+					r.logger.Errorf("   🔍 Endpoint or UUID not found")
+				case codes.Internal:
+					r.logger.Errorf("   🔥 Internal server error")
+				case codes.DeadlineExceeded:
+					r.logger.Errorf("   ⏰ Request timeout exceeded")
+				case codes.Unavailable:
+					r.logger.Errorf("   🚫 Server unavailable")
+				default:
+					r.logger.Errorf("   ❓ Unknown gRPC error")
+				}
+			}
+
+			return fmt.Errorf(errorMsg)
 		}
-		r.logger.Errorf("   Raw error: %v", err)
+
+		// Handle non-gRPC errors
+		errorKey = fmt.Sprintf("generic_users_%s", r.serverAddr)
+		if r.shouldLogError(errorKey) {
+			r.logger.Errorf("❌ gRPC online users request failed!")
+			r.logger.Errorf("   Server: %s", r.serverAddr)
+			r.logger.Errorf("   UUID: %s", uuid)
+			r.logger.Errorf("   Raw error: %v", err)
+		}
 		return fmt.Errorf("gRPC online users request failed: %w", err)
 	}
 
@@ -517,10 +659,15 @@ func (r *ReportClient) SendOnlineUsersReport(uuid string, onlineEmails []string)
 
 	// Check response
 	if !resp.Success {
-		r.logger.Errorf("❌ Server rejected the online users report: %s", resp.Message)
+		errorKey := fmt.Sprintf("server_reject_users_%s", r.serverAddr)
+		if r.shouldLogError(errorKey) {
+			r.logger.Errorf("❌ Server rejected the online users report: %s", resp.Message)
+		}
 		return fmt.Errorf("online users report failed: %s", resp.Message)
 	}
 
+	// Mark success and log recovery if needed
+	r.markSuccess("在线用户上报")
 	r.logger.Debugf("🎉 Online users data successfully reported via gRPC!")
 	return nil
 }

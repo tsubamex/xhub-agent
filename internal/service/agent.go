@@ -201,9 +201,7 @@ func (a *AgentService) executeOnce() {
 	// Report data to xhub
 	a.logger.Debug("📡 Sending data to xhub via gRPC...")
 	if err := a.reportClient.SendReport(a.config.UUID, status.Data); err != nil {
-		a.logger.Errorf("❌ Failed to report data via gRPC: %v", err)
-		a.logger.Errorf("   🎯 Server: %s:%d", a.config.GRPCServer, a.config.GRPCPort)
-		a.logger.Errorf("   🆔 UUID: %s", a.config.UUID)
+		// Error details are already logged in report.go with deduplication
 		return
 	}
 
@@ -298,9 +296,7 @@ func (a *AgentService) reportSubscriptionData() {
 	// Report data to xhub
 	a.logger.Debug("📡 Sending subscription data to xhub via gRPC...")
 	if err := a.reportClient.SendSubscriptionReport(a.config.UUID, reportSubs); err != nil {
-		a.logger.Errorf("❌ Failed to report subscription data via gRPC: %v", err)
-		a.logger.Errorf("   🎯 Server: %s:%d", a.config.GRPCServer, a.config.GRPCPort)
-		a.logger.Errorf("   🆔 UUID: %s", a.config.UUID)
+		// Error details are already logged in report.go with deduplication
 		return
 	}
 
@@ -335,9 +331,7 @@ func (a *AgentService) reportOnlineUsersData() {
 	// Report data to xhub
 	a.logger.Debug("📡 Sending online users data to xhub via gRPC...")
 	if err := a.reportClient.SendOnlineUsersReport(a.config.UUID, onlineResp.Data); err != nil {
-		a.logger.Errorf("❌ Failed to report online users data via gRPC: %v", err)
-		a.logger.Errorf("   🎯 Server: %s:%d", a.config.GRPCServer, a.config.GRPCPort)
-		a.logger.Errorf("   🆔 UUID: %s", a.config.UUID)
+		// Error details are already logged in report.go with deduplication
 		return
 	}
 

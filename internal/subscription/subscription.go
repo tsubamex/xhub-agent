@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"xhub-agent/internal/auth"
+	"xhub-agent/pkg/logger"
 )
 
 // SubscriptionClient subscription information client
@@ -18,6 +19,7 @@ type SubscriptionClient struct {
 	auth           *auth.XUIAuth
 	client         *http.Client
 	resolvedDomain string
+	logger         *logger.Logger
 }
 
 // DefaultSettingsResponse default settings response structure
@@ -77,9 +79,10 @@ type SubscriptionHeaders struct {
 }
 
 // NewSubscriptionClient creates a new subscription client
-func NewSubscriptionClient(authClient *auth.XUIAuth, resolvedDomain string) *SubscriptionClient {
+func NewSubscriptionClient(authClient *auth.XUIAuth, resolvedDomain string, logger *logger.Logger) *SubscriptionClient {
 	return &SubscriptionClient{
-		auth: authClient,
+		auth:   authClient,
+		logger: logger,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
@@ -207,13 +210,13 @@ func (s *SubscriptionClient) ExtractUniqueSubIDs(inbounds []*InboundInfo) ([]Sub
 		for _, client := range settings.Clients {
 			if !client.Enable {
 				// Debug: log skipped disabled client
-				fmt.Printf("[DEBUG] Skipping disabled client: Email=%s, SubID=%s\n", client.Email, client.SubID)
+				s.logger.Debugf("Skipping disabled client: Email=%s, SubID=%s", client.Email, client.SubID)
 				continue
 			}
 
 			if client.SubID == "" {
 				// Debug: log skipped client without SubID
-				fmt.Printf("[DEBUG] Skipping client without SubID: Email=%s\n", client.Email)
+				s.logger.Debugf("Skipping client without SubID: Email=%s", client.Email)
 				continue
 			}
 
@@ -223,7 +226,7 @@ func (s *SubscriptionClient) ExtractUniqueSubIDs(inbounds []*InboundInfo) ([]Sub
 					SubID: client.SubID,
 					Email: client.Email,
 				}
-				fmt.Printf("[DEBUG] Added active client: Email=%s, SubID=%s\n", client.Email, client.SubID)
+				s.logger.Debugf("Added active client: Email=%s, SubID=%s", client.Email, client.SubID)
 			}
 		}
 	}
@@ -330,13 +333,13 @@ func (s *SubscriptionClient) GetAllSubscriptionData() ([]SubscriptionData, error
 		content, headers, err := s.GetSubscriptionContent(settings.SubURI, sub.SubID)
 		if err != nil {
 			// Log error but continue processing other subscriptions
-			fmt.Printf("[WARNING] Failed to get subscription content for SubID %s: %v\n", sub.SubID, err)
+			s.logger.Warnf("Failed to get subscription content for SubID %s: %v", sub.SubID, err)
 			continue
 		}
 
 		// If content is empty, subscription service may be down, log warning but continue
 		if content == "" {
-			fmt.Printf("[WARNING] Empty subscription content for SubID %s (subscription service may be down), skipping\n", sub.SubID)
+			s.logger.Warnf("Empty subscription content for SubID %s (subscription service may be down), skipping", sub.SubID)
 			continue
 		}
 

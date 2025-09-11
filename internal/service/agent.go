@@ -52,10 +52,10 @@ func NewAgentService(configPath, logFile string) (*AgentService, error) {
 	authClient := auth.NewXUIAuth(cfg.GetFullXUIURL(), cfg.XUIUser, cfg.XUIPass)
 
 	// Create monitoring client
-	monitorClient := monitor.NewMonitorClient(authClient)
+	monitorClient := monitor.NewMonitorClient(authClient, log)
 
 	// Create subscription client
-	subscriptionClient := subscription.NewSubscriptionClient(authClient, cfg.ResolvedDomain)
+	subscriptionClient := subscription.NewSubscriptionClient(authClient, cfg.ResolvedDomain, log)
 
 	// Create report client using gRPC server and port
 	grpcAddr := fmt.Sprintf("%s:%d", cfg.GRPCServer, cfg.GRPCPort)

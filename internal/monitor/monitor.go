@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"xhub-agent/internal/auth"
+	"xhub-agent/pkg/logger"
 )
 
 // MonitorClient monitoring data client
 type MonitorClient struct {
 	auth   *auth.XUIAuth
 	client *http.Client
+	logger *logger.Logger
 }
 
 // ServerStatusResponse server status response structure
@@ -102,9 +104,10 @@ type OnlineUsersResponse struct {
 }
 
 // NewMonitorClient creates a new monitoring client
-func NewMonitorClient(authClient *auth.XUIAuth) *MonitorClient {
+func NewMonitorClient(authClient *auth.XUIAuth, logger *logger.Logger) *MonitorClient {
 	return &MonitorClient{
-		auth: authClient,
+		auth:   authClient,
+		logger: logger,
 		client: &http.Client{
 			Timeout: 30 * time.Second, // 30 second timeout
 			// Skip HTTPS certificate verification (since 3x-ui usually uses self-signed certificates)
@@ -151,7 +154,7 @@ func (m *MonitorClient) GetServerStatus() (*ServerStatusResponse, error) {
 	}
 
 	// Print raw response body for debugging
-	fmt.Printf("[DEBUG] 3x-ui server status response body: %s\n", string(body))
+	m.logger.Debugf("3x-ui server status response body: %s", string(body))
 
 	// Parse response
 	var statusResp ServerStatusResponse
@@ -208,7 +211,7 @@ func (m *MonitorClient) GetOnlineUsers() (*OnlineUsersResponse, error) {
 	}
 
 	// Print raw response body for debugging
-	fmt.Printf("[DEBUG] 3x-ui online users response body: %s\n", string(body))
+	m.logger.Debugf("3x-ui online users response body: %s", string(body))
 
 	// Parse response
 	var onlineResp OnlineUsersResponse

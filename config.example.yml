@@ -32,3 +32,11 @@ poll_interval: 2
 
 # Log level: debug, info, warn, error (default: info)
 log_level: "info"
+
+# Hysteria2 configuration (optional)
+# Enable this if you have Hysteria2 running on this server
+# hysteria2_enabled: true
+# hysteria2_config_path: "/etc/hysteria/config.yaml"  # Path to Hysteria2 config file
+# hysteria2_node_name: "Hysteria2节点"                  # Node display name in subscription
+# hysteria2_server_addr: "your-domain.com"             # External server address (domain or IP)
+# hysteria2_insecure: false                            # Set to true if using self-signed certificates

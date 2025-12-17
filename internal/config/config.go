@@ -26,6 +26,13 @@ type Config struct {
 	XUIBaseURL   string `yaml:"xui_base_url"`  // 3x-ui base URL, default 127.0.0.1 (without port)
 	PollInterval int    `yaml:"poll_interval"` // Poll interval (seconds), default 2
 	LogLevel     string `yaml:"log_level"`     // Log level, default info
+
+	// Hysteria2 configuration (optional)
+	Hysteria2Enabled    bool   `yaml:"hysteria2_enabled"`     // Enable Hysteria2 support
+	Hysteria2ConfigPath string `yaml:"hysteria2_config_path"` // Path to Hysteria2 config, default /etc/hysteria/config.yaml
+	Hysteria2NodeName   string `yaml:"hysteria2_node_name"`   // Node display name
+	Hysteria2ServerAddr string `yaml:"hysteria2_server_addr"` // External server address (domain or IP)
+	Hysteria2Insecure   bool   `yaml:"hysteria2_insecure"`    // Skip TLS verification
 }
 
 // LoadFromFile loads configuration from YAML file

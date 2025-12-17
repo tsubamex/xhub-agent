@@ -10,6 +10,7 @@ import (
 
 	"xhub-agent/internal/auth"
 	"xhub-agent/internal/config"
+	"xhub-agent/internal/hysteria2"
 	"xhub-agent/internal/monitor"
 	"xhub-agent/internal/report"
 	"xhub-agent/internal/subscription"
@@ -24,6 +25,7 @@ type AgentService struct {
 	monitorClient      *monitor.MonitorClient
 	reportClient       *report.ReportClient
 	subscriptionClient *subscription.SubscriptionClient
+	hysteria2Client    *hysteria2.Client // Hysteria2 configuration client
 
 	ctx               context.Context
 	cancel            context.CancelFunc
@@ -61,6 +63,20 @@ func NewAgentService(configPath, logFile string) (*AgentService, error) {
 	grpcAddr := fmt.Sprintf("%s:%d", cfg.GRPCServer, cfg.GRPCPort)
 	reportClient := report.NewReportClient(grpcAddr, cfg.XHubAPIKey, log)
 
+	// Create Hysteria2 client
+	hy2Client := hysteria2.NewClient(log)
+	hy2Client.Configure(
+		cfg.Hysteria2Enabled,
+		cfg.Hysteria2ConfigPath,
+		cfg.Hysteria2NodeName,
+		cfg.Hysteria2ServerAddr,
+		cfg.Hysteria2Insecure,
+	)
+
+	if cfg.Hysteria2Enabled {
+		log.Infof("🚀 Hysteria2 support enabled, config: %s", cfg.Hysteria2ConfigPath)
+	}
+
 	// Create context
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -71,6 +87,7 @@ func NewAgentService(configPath, logFile string) (*AgentService, error) {
 		monitorClient:      monitorClient,
 		reportClient:       reportClient,
 		subscriptionClient: subscriptionClient,
+		hysteria2Client:    hy2Client,
 		ctx:                ctx,
 		cancel:             cancel,
 	}, nil
@@ -234,13 +251,42 @@ func (a *AgentService) reportSubscriptionData() {
 
 	a.logger.Debugf("📋 Found %d unique subscriptions to report", len(subscriptions))
 
+	// Get Hysteria2 node config if enabled
+	var hy2NodeRaw string
+	if a.hysteria2Client.IsEnabled() {
+		rawURI, err := a.hysteria2Client.GetNodeConfigRaw()
+		if err != nil {
+			a.logger.Warnf("⚠️ Failed to get Hysteria2 node config: %v", err)
+		} else {
+			hy2NodeRaw = rawURI
+			a.logger.Debugf("🚀 Hysteria2 node URI: %s", hy2NodeRaw)
+		}
+	}
+
 	// Convert to report format
 	var reportSubs []report.SubscriptionData
 	for _, sub := range subscriptions {
+		nodeConfig := sub.NodeConfig
+
+		// Inject Hysteria2 node if available
+		// The NodeConfig is base64 encoded, we need to decode, append, and re-encode
+		if hy2NodeRaw != "" && nodeConfig != "" {
+			decoded, err := base64.StdEncoding.DecodeString(nodeConfig)
+			if err == nil {
+				// Append Hysteria2 URI to the decoded content
+				combined := string(decoded)
+				if !endsWithNewline(combined) {
+					combined += "\n"
+				}
+				combined += hy2NodeRaw
+				nodeConfig = base64.StdEncoding.EncodeToString([]byte(combined))
+			}
+		}
+
 		reportSub := report.SubscriptionData{
 			SubID:      sub.SubID,
 			Email:      sub.Email,
-			NodeConfig: sub.NodeConfig,
+			NodeConfig: nodeConfig,
 			Headers: report.SubscriptionHeaders{ // Convert headers to report package type
 				ProfileTitle:          sub.Headers.ProfileTitle,
 				ProfileUpdateInterval: sub.Headers.ProfileUpdateInterval,
@@ -385,4 +431,9 @@ func containsSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// endsWithNewline checks if a string ends with a newline character
+func endsWithNewline(s string) bool {
+	return len(s) > 0 && (s[len(s)-1] == '\n' || s[len(s)-1] == '\r')
 }

@@ -153,11 +153,14 @@ func (c *Client) BuildURI(config *Hysteria2Config) (string, error) {
 	// Build query parameters
 	params := url.Values{}
 
-	// Add port hopping range as ports query parameter (for Clash compatibility)
+	// Add port hopping range as query parameters
+	// - ports: for Clash compatibility
+	// - mport: for Shadowrocket compatibility
 	if c.portHopping && c.portHoppingRange != "" {
 		// Convert "28299:60000" format to "28299-60000" for URI
 		portRange := strings.ReplaceAll(c.portHoppingRange, ":", "-")
 		params.Set("ports", portRange)
+		params.Set("mport", portRange)
 	}
 
 	// Add insecure flag if needed

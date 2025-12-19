@@ -155,9 +155,12 @@ func TestBuildURIWithPortHopping(t *testing.T) {
 		t.Fatalf("BuildURI failed: %v", err)
 	}
 
-	// Verify URI contains port range instead of single port
-	if !strings.Contains(uri, "example.com:20000-50000/") {
-		t.Errorf("URI should contain port range, got: %s", uri)
+	// Verify URI uses ports query parameter (Clash compatible format)
+	if !strings.Contains(uri, "example.com:443/") {
+		t.Errorf("URI should contain single port in host:port, got: %s", uri)
+	}
+	if !strings.Contains(uri, "ports=20000-50000") {
+		t.Errorf("URI should contain ports query parameter, got: %s", uri)
 	}
 	if !strings.HasPrefix(uri, "hysteria2://") {
 		t.Errorf("URI should start with hysteria2://, got: %s", uri)
@@ -190,12 +193,13 @@ func TestBuildURIWithPortHoppingColonFormat(t *testing.T) {
 		t.Fatalf("BuildURI failed: %v", err)
 	}
 
-	// Verify colon is converted to dash in URI
-	if !strings.Contains(uri, "test.example.com:28299-60000/") {
-		t.Errorf("URI should contain port range with dash format, got: %s", uri)
+	// Verify single port in host:port and ports query parameter
+	if !strings.Contains(uri, "test.example.com:28299/") {
+		t.Errorf("URI should contain single port in host:port, got: %s", uri)
 	}
-	if strings.Contains(uri, ":28299:60000") {
-		t.Errorf("URI should not contain colon format port range, got: %s", uri)
+	// Verify colon is converted to dash in ports parameter
+	if !strings.Contains(uri, "ports=28299-60000") {
+		t.Errorf("URI should contain ports query parameter with dash format, got: %s", uri)
 	}
 
 	t.Logf("Generated URI with colon-to-dash conversion: %s", uri)

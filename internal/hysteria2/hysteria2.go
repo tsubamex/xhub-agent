@@ -144,21 +144,21 @@ func (c *Client) BuildURI(config *Hysteria2Config) (string, error) {
 		uriBuilder.WriteString("@")
 	}
 
-	// Add host and port (with port hopping range if enabled)
+	// Add host and port (always use single port, port hopping uses ports query param)
 	uriBuilder.WriteString(serverAddr)
 	uriBuilder.WriteString(":")
-	if c.portHopping && c.portHoppingRange != "" {
-		// Use port hopping range format: startPort-endPort
-		// Convert "28299:60000" format to "28299-60000" for URI
-		portRange := strings.ReplaceAll(c.portHoppingRange, ":", "-")
-		uriBuilder.WriteString(portRange)
-	} else {
-		uriBuilder.WriteString(port)
-	}
+	uriBuilder.WriteString(port)
 	uriBuilder.WriteString("/")
 
 	// Build query parameters
 	params := url.Values{}
+
+	// Add port hopping range as ports query parameter (for Clash compatibility)
+	if c.portHopping && c.portHoppingRange != "" {
+		// Convert "28299:60000" format to "28299-60000" for URI
+		portRange := strings.ReplaceAll(c.portHoppingRange, ":", "-")
+		params.Set("ports", portRange)
+	}
 
 	// Add insecure flag if needed
 	if c.insecure {

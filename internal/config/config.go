@@ -28,11 +28,13 @@ type Config struct {
 	LogLevel     string `yaml:"log_level"`     // Log level, default info
 
 	// Hysteria2 configuration (optional)
-	Hysteria2Enabled    bool   `yaml:"hysteria2_enabled"`     // Enable Hysteria2 support
-	Hysteria2ConfigPath string `yaml:"hysteria2_config_path"` // Path to Hysteria2 config, default /etc/hysteria/config.yaml
-	Hysteria2NodeName   string `yaml:"hysteria2_node_name"`   // Node display name
-	Hysteria2ServerAddr string `yaml:"hysteria2_server_addr"` // External server address (domain or IP)
-	Hysteria2Insecure   bool   `yaml:"hysteria2_insecure"`    // Skip TLS verification
+	Hysteria2Enabled          bool   `yaml:"hysteria2_enabled"`            // Enable Hysteria2 support
+	Hysteria2ConfigPath       string `yaml:"hysteria2_config_path"`        // Path to Hysteria2 config, default /etc/hysteria/config.yaml
+	Hysteria2NodeName         string `yaml:"hysteria2_node_name"`          // Node display name
+	Hysteria2ServerAddr       string `yaml:"hysteria2_server_addr"`        // External server address (domain or IP)
+	Hysteria2Insecure         bool   `yaml:"hysteria2_insecure"`           // Skip TLS verification
+	Hysteria2PortHopping      bool   `yaml:"hysteria2_port_hopping"`       // Enable port hopping to evade UDP blocking
+	Hysteria2PortHoppingRange string `yaml:"hysteria2_port_hopping_range"` // Port range for hopping, e.g. "20000-50000"
 }
 
 // LoadFromFile loads configuration from YAML file

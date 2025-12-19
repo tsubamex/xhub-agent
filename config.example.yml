@@ -40,3 +40,6 @@ log_level: "info"
 # hysteria2_node_name: "Hysteria2节点"                  # Node display name in subscription
 # hysteria2_server_addr: "your-domain.com"             # External server address (domain or IP)
 # hysteria2_insecure: false                            # Set to true if using self-signed certificates
+# Port Hopping - anti-blocking feature (requires iptables setup on server)
+# hysteria2_port_hopping: true                         # Enable port hopping
+# hysteria2_port_hopping_range: "11223-60000"          # Port range (default: 11223-60000, hysteria2 listen port as start)

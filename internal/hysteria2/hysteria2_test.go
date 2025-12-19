@@ -134,3 +134,69 @@ func TestIsIPAddress(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildURIWithPortHopping(t *testing.T) {
+	client := &Client{
+		enabled:          true,
+		nodeName:         "PortHoppingNode",
+		serverAddr:       "example.com",
+		insecure:         false,
+		portHopping:      true,
+		portHoppingRange: "20000-50000",
+	}
+
+	config := &Hysteria2Config{
+		Listen: ":443",
+	}
+	config.Auth.Password = "testpass"
+
+	uri, err := client.BuildURI(config)
+	if err != nil {
+		t.Fatalf("BuildURI failed: %v", err)
+	}
+
+	// Verify URI contains port range instead of single port
+	if !strings.Contains(uri, "example.com:20000-50000/") {
+		t.Errorf("URI should contain port range, got: %s", uri)
+	}
+	if !strings.HasPrefix(uri, "hysteria2://") {
+		t.Errorf("URI should start with hysteria2://, got: %s", uri)
+	}
+	if !strings.Contains(uri, "#PortHoppingNode") {
+		t.Errorf("URI should contain node name, got: %s", uri)
+	}
+
+	t.Logf("Generated URI with port hopping: %s", uri)
+}
+
+func TestBuildURIWithPortHoppingColonFormat(t *testing.T) {
+	// Test that colon format "20000:50000" is converted to dash format "20000-50000"
+	client := &Client{
+		enabled:          true,
+		nodeName:         "ColonFormatNode",
+		serverAddr:       "test.example.com",
+		insecure:         true,
+		portHopping:      true,
+		portHoppingRange: "28299:60000", // colon format from config
+	}
+
+	config := &Hysteria2Config{
+		Listen: ":28299",
+	}
+	config.Auth.Password = "mypass"
+
+	uri, err := client.BuildURI(config)
+	if err != nil {
+		t.Fatalf("BuildURI failed: %v", err)
+	}
+
+	// Verify colon is converted to dash in URI
+	if !strings.Contains(uri, "test.example.com:28299-60000/") {
+		t.Errorf("URI should contain port range with dash format, got: %s", uri)
+	}
+	if strings.Contains(uri, ":28299:60000") {
+		t.Errorf("URI should not contain colon format port range, got: %s", uri)
+	}
+
+	t.Logf("Generated URI with colon-to-dash conversion: %s", uri)
+}

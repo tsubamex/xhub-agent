@@ -503,13 +503,29 @@ generate_config() {
         EXISTING_POLL_INTERVAL=$(grep "^poll_interval:" "$BACKUP_CONFIG" 2>/dev/null | awk '{print $2}' || echo "2")
         EXISTING_LOG_LEVEL=$(grep "^log_level:" "$BACKUP_CONFIG" 2>/dev/null | cut -d'"' -f2 || echo "info")
         
-        log_info "Preserved: poll_interval, log_level"
+        # Preserve Hysteria2 settings if present
+        EXISTING_HY2_ENABLED=$(grep "^hysteria2_enabled:" "$BACKUP_CONFIG" 2>/dev/null | awk '{print $2}' || echo "false")
+        EXISTING_HY2_CONFIG_PATH=$(grep "^hysteria2_config_path:" "$BACKUP_CONFIG" 2>/dev/null | cut -d'"' -f2 || echo "")
+        EXISTING_HY2_NODE_NAME=$(grep "^hysteria2_node_name:" "$BACKUP_CONFIG" 2>/dev/null | cut -d'"' -f2 || echo "")
+        EXISTING_HY2_SERVER_ADDR=$(grep "^hysteria2_server_addr:" "$BACKUP_CONFIG" 2>/dev/null | cut -d'"' -f2 || echo "")
+        EXISTING_HY2_INSECURE=$(grep "^hysteria2_insecure:" "$BACKUP_CONFIG" 2>/dev/null | awk '{print $2}' || echo "false")
+        EXISTING_HY2_PORT_HOPPING=$(grep "^hysteria2_port_hopping:" "$BACKUP_CONFIG" 2>/dev/null | awk '{print $2}' || echo "false")
+        EXISTING_HY2_PORT_HOPPING_RANGE=$(grep "^hysteria2_port_hopping_range:" "$BACKUP_CONFIG" 2>/dev/null | cut -d'"' -f2 || echo "11223-60000")
+        
+        log_info "Preserved: poll_interval, log_level, hysteria2 settings"
         log_info "Updated: all server-provided configuration (uuid, credentials, endpoints)"
     else
         # Use default values for new installation
         EXISTING_XUI_BASE_URL="127.0.0.1"
         EXISTING_POLL_INTERVAL="2"
         EXISTING_LOG_LEVEL="info"
+        EXISTING_HY2_ENABLED="false"
+        EXISTING_HY2_CONFIG_PATH=""
+        EXISTING_HY2_NODE_NAME=""
+        EXISTING_HY2_SERVER_ADDR=""
+        EXISTING_HY2_INSECURE="false"
+        EXISTING_HY2_PORT_HOPPING="false"
+        EXISTING_HY2_PORT_HOPPING_RANGE="11223-60000"
     fi
     
     cat > "$INSTALL_DIR/config.yml" <<EOF
@@ -533,14 +549,105 @@ port: $PORT
 xui_base_url: "$EXISTING_XUI_BASE_URL"
 poll_interval: $EXISTING_POLL_INTERVAL
 log_level: "$EXISTING_LOG_LEVEL"
+
+# Hysteria2 configuration (preserved from previous installation)
+# Enable and configure these settings manually if you have Hysteria2 running on this server
+hysteria2_enabled: $EXISTING_HY2_ENABLED
+hysteria2_config_path: "$EXISTING_HY2_CONFIG_PATH"
+hysteria2_node_name: "$EXISTING_HY2_NODE_NAME"
+hysteria2_server_addr: "$EXISTING_HY2_SERVER_ADDR"
+hysteria2_insecure: $EXISTING_HY2_INSECURE
+# Port Hopping - requires iptables setup, run: setup_hysteria2_port_hopping
+hysteria2_port_hopping: $EXISTING_HY2_PORT_HOPPING
+hysteria2_port_hopping_range: "$EXISTING_HY2_PORT_HOPPING_RANGE"
 EOF
 
     log_info "Configuration file generated: $INSTALL_DIR/config.yml"
     
     if [ "$EXISTING_CONFIG" = true ]; then
         log_info "Server configuration updated from xhub"
-        log_info "Optional settings (timeouts, intervals) preserved"
+        log_info "Optional settings (timeouts, intervals, hysteria2) preserved"
         log_info "Original config backed up to: $BACKUP_CONFIG"
+    fi
+}
+
+# Setup Hysteria2 port hopping iptables rules
+# This function reads config and sets up UDP port forwarding for port hopping
+setup_hysteria2_port_hopping() {
+    log_info "🔧 Checking Hysteria2 port hopping configuration..."
+    
+    # Read config from config.yml
+    if [ ! -f "$INSTALL_DIR/config.yml" ]; then
+        log_warn "Config file not found, skipping port hopping setup"
+        return
+    fi
+    
+    HY2_ENABLED=$(grep "^hysteria2_enabled:" "$INSTALL_DIR/config.yml" 2>/dev/null | awk '{print $2}' || echo "false")
+    HY2_PORT_HOPPING=$(grep "^hysteria2_port_hopping:" "$INSTALL_DIR/config.yml" 2>/dev/null | awk '{print $2}' || echo "false")
+    HY2_PORT_RANGE=$(grep "^hysteria2_port_hopping_range:" "$INSTALL_DIR/config.yml" 2>/dev/null | cut -d'"' -f2 || echo "")
+    
+    if [ "$HY2_ENABLED" != "true" ]; then
+        log_info "Hysteria2 not enabled, skipping port hopping setup"
+        return
+    fi
+    
+    if [ "$HY2_PORT_HOPPING" != "true" ]; then
+        log_info "Port hopping not enabled, skipping iptables setup"
+        return
+    fi
+    
+    if [ -z "$HY2_PORT_RANGE" ]; then
+        log_warn "Port hopping range not configured, skipping"
+        return
+    fi
+    
+    # Parse port range (format: startPort-endPort or startPort:endPort)
+    # Convert dash format to colon for iptables
+    PORT_RANGE_IPTABLES=$(echo "$HY2_PORT_RANGE" | sed 's/-/:/')
+    START_PORT=$(echo "$PORT_RANGE_IPTABLES" | cut -d':' -f1)
+    END_PORT=$(echo "$PORT_RANGE_IPTABLES" | cut -d':' -f2)
+    
+    if [ -z "$START_PORT" ] || [ -z "$END_PORT" ]; then
+        log_warn "Invalid port hopping range: $HY2_PORT_RANGE, skipping"
+        return
+    fi
+    
+    log_info "🚀 Configuring port hopping: UDP $START_PORT:$END_PORT -> $START_PORT"
+    
+    # Check and install iptables-persistent if not present
+    if ! command -v netfilter-persistent &> /dev/null; then
+        log_info "Installing iptables-persistent..."
+        if command -v apt-get &> /dev/null; then
+            apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y iptables-persistent
+        elif command -v yum &> /dev/null; then
+            log_warn "iptables-persistent not available for yum, please save iptables rules manually"
+        else
+            log_warn "Unable to install iptables-persistent, please save iptables rules manually"
+        fi
+    fi
+    
+    # Check if rule already exists using iptables -C (check)
+    if iptables -t nat -C PREROUTING -p udp --dport $START_PORT:$END_PORT -j REDIRECT --to-ports $START_PORT 2>/dev/null; then
+        log_info "✅ iptables rule already exists, skipping"
+        return
+    fi
+    
+    # Add new iptables rule
+    iptables -t nat -A PREROUTING -p udp --dport $START_PORT:$END_PORT -j REDIRECT --to-ports $START_PORT
+    
+    if [ $? -eq 0 ]; then
+        log_info "✅ iptables rule added successfully"
+        
+        # Save rules
+        if command -v netfilter-persistent &> /dev/null; then
+            netfilter-persistent save
+            log_info "✅ iptables rules saved persistently"
+        else
+            log_warn "⚠️ netfilter-persistent not available, rules may not persist after reboot"
+            log_warn "   Please run: iptables-save > /etc/iptables/rules.v4"
+        fi
+    else
+        log_error "❌ Failed to add iptables rule"
     fi
 }
 
@@ -795,6 +902,7 @@ main() {
         create_directories
         download_agent
         generate_config
+        setup_hysteria2_port_hopping
         create_service
         start_service
         

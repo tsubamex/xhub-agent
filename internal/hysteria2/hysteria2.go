@@ -48,26 +48,29 @@ type Client struct {
 	logger *logger.Logger
 
 	// Configuration
-	enabled    bool
-	configPath string
-	nodeName   string
-	serverAddr string // External server address (domain or IP)
-	insecure   bool   // Whether to skip TLS verification
+	enabled          bool
+	configPath       string
+	nodeName         string
+	serverAddr       string // External server address (domain or IP)
+	insecure         bool   // Whether to skip TLS verification
+	portHopping      bool   // Enable port hopping
+	portHoppingRange string // Port range for hopping, e.g. "20000-50000"
 }
 
 // NewClient creates a new Hysteria2 configuration client
 func NewClient(logger *logger.Logger) *Client {
 	return &Client{
-		logger:     logger,
-		enabled:    false,
-		configPath: "/etc/hysteria/config.yaml",
-		nodeName:   "Hysteria2",
-		insecure:   false,
+		logger:           logger,
+		enabled:          false,
+		configPath:       "/etc/hysteria/config.yaml",
+		nodeName:         "Hysteria2",
+		insecure:         false,
+		portHoppingRange: "11223-60000", // Default port hopping range
 	}
 }
 
 // Configure sets up the Hysteria2 client with the given parameters
-func (c *Client) Configure(enabled bool, configPath, nodeName, serverAddr string, insecure bool) {
+func (c *Client) Configure(enabled bool, configPath, nodeName, serverAddr string, insecure bool, portHopping bool, portHoppingRange string) {
 	c.enabled = enabled
 	if configPath != "" {
 		c.configPath = configPath
@@ -77,6 +80,10 @@ func (c *Client) Configure(enabled bool, configPath, nodeName, serverAddr string
 	}
 	c.serverAddr = serverAddr
 	c.insecure = insecure
+	c.portHopping = portHopping
+	if portHoppingRange != "" {
+		c.portHoppingRange = portHoppingRange
+	}
 }
 
 // IsEnabled returns whether Hysteria2 support is enabled
@@ -137,10 +144,17 @@ func (c *Client) BuildURI(config *Hysteria2Config) (string, error) {
 		uriBuilder.WriteString("@")
 	}
 
-	// Add host and port
+	// Add host and port (with port hopping range if enabled)
 	uriBuilder.WriteString(serverAddr)
 	uriBuilder.WriteString(":")
-	uriBuilder.WriteString(port)
+	if c.portHopping && c.portHoppingRange != "" {
+		// Use port hopping range format: startPort-endPort
+		// Convert "28299:60000" format to "28299-60000" for URI
+		portRange := strings.ReplaceAll(c.portHoppingRange, ":", "-")
+		uriBuilder.WriteString(portRange)
+	} else {
+		uriBuilder.WriteString(port)
+	}
 	uriBuilder.WriteString("/")
 
 	// Build query parameters

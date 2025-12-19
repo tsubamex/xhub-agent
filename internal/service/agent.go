@@ -71,6 +71,8 @@ func NewAgentService(configPath, logFile string) (*AgentService, error) {
 		cfg.Hysteria2NodeName,
 		cfg.Hysteria2ServerAddr,
 		cfg.Hysteria2Insecure,
+		cfg.Hysteria2PortHopping,
+		cfg.Hysteria2PortHoppingRange,
 	)
 
 	if cfg.Hysteria2Enabled {
